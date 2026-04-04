@@ -1,0 +1,47 @@
+# Virtual Environment
+venv/
+venv_cpu/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Models (Heavy binary files)
+# Keep only JSON data files, ignore the actual model weights.
+models/*.ckpt
+models/*.onnx
+models/*.th
+models/*.pth
+models/*.pth.tar
+models/*.yaml
+# But we want to keep the metadata files
+!models/download_checks.json
+!models/mdx_model_data.json
+
+# Audio Output
+output/
+separated/
+
+# Build artifacts
+build/
+dist/
+*.spec
+Music separator Mac.zip
+
+# System/IDE
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+Log.txt
+*.log
+
+# Binaries
+ffmpeg_bin/
+ffprobe_bin/

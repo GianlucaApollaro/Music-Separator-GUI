@@ -1,0 +1,72 @@
+===============================================================================
+                          MUSIC SEPARATOR - USER MANUAL
+===============================================================================
+
+Welcome to Music separator, a powerful AI-driven audio separation tool based on 
+the state-of-the-art Roformer and MDX architectures. This application allows 
+you to isolate vocals, instruments, and specific elements with studio quality.
+
+1. INSTALLATION
+-------------------------------------------------------------------------------
+WINDOWS:
+- Run 'install.bat' to create the environment and install dependencies.
+- Use 'run.bat' to launch the application.
+- If you don't have an NVIDIA GPU, use 'install_cpu.bat' and 'runCpu.bat'.
+
+macOS (Apple Silicon M1/M2/M3/M4):
+- Ensure you have Homebrew installed (brew.sh).
+- Install dependencies via Terminal: brew install ffmpeg libsndfile python@3.12
+- Right-click and 'Open' the 'install_mac.command' file.
+- Use 'run_mac.command' to launch the app.
+- See README.txt in the Mac folder for permission troubleshooting (chmod +x).
+
+2. BASIC USAGE (SINGLE MODEL)
+-------------------------------------------------------------------------------
+1. Select your input audio file (WAV, FLAC, MP3, etc.).
+2. Choose an Output Directory.
+3. Select a Model from the dropdown (categorized by type: Vocals, Drums, etc.).
+4. Select the output Bit Depth (16-bit is standard, 32-bit for high-end).
+5. Click "Start Separation".
+
+3. NATIVE ENSEMBLE (MIXING MODELS)
+-------------------------------------------------------------------------------
+Tick the "Ensemble" checkbox to select TWO different models. The application 
+will process the file with both and mathematically fuse the results for 
+potentially better isolation.
+
+4. CHAINED ENSEMBLE PRESETS (ADVANCED)
+-------------------------------------------------------------------------------
+The "Preset" dropdown allows you to run "Chained" processes where the output 
+of one model is automatically fed into another.
+
+*Note: Selecting a Preset overrides individual model selection.*
+
+AVAILABLE PRESETS:
+- Vocal Split: Separates Vocals/Inst, then splits Vocals into Lead and Backing.
+- Vocal De-Reverb: Separates Vocals, then removes reverb/echo from the voice.
+- Ultimate Stems (7 Tracks): Extracts high-quality Vocals and Instrumental, 
+  then splits the instrumental into 5 parts (Bass, Drums, Piano, Guitar, Other).
+- Male/Female Split: Specifically isolates male vs. female voices.
+- Live Restore: Extracts the Crowd/Applause, then cleans the remaining stage 
+  audio into Vocals and Instrumental.
+
+5. SPECIALIZED MODELS
+-------------------------------------------------------------------------------
+- Drum Separation: Splitting drums into Kick, Snare, Toms, and Cymbals.
+- Aspiration: Isolate breaths and vocal "air" for surgical cleaning.
+- Crowd: Perfect for cleaning live recordings from audience noise.
+
+6. OUTPUT FILENAMES
+-------------------------------------------------------------------------------
+The program uses clean suffixes for easy identification:
+_Vocals, _Instrumental, _Lead, _Backing, _DeReverb, _Male, _Female, _Crowd.
+
+7. HARDWARE ACCELERATION
+-------------------------------------------------------------------------------
+- Windows: Uses CUDA (NVIDIA) or CPU.
+- macOS: Uses MPS (Metal Performance Shaders) on M-series chips for 
+  extremely fast processing via the Neural Engine.
+
+===============================================================================
+HAPPY SEPARATING!
+===============================================================================

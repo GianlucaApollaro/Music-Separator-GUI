@@ -15,7 +15,7 @@
 ## Installation and Usage 🚀
 
 ### Windows
-1. Download the latest version from the [Releases](https://github.com/Music-Separator-GUI/releases) page.
+1. Download the latest version from the [Releases](https://github.com/GianlucaApollaro/Music-Separator-GUI/releases) page.
 2. Run `install.bat` once to set up the environment (required for source run) or just run the executable if using the bundled version.
 3. Run `run.bat` or the `.exe` to start the application.
 
@@ -36,3 +36,4 @@ This project is a wrapper around several amazing open-source projects. Heartfelt
 ## License 📄
 
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details. Please respect the licenses of the underlying models and the `audio-separator` library when using or redistributing.
+      

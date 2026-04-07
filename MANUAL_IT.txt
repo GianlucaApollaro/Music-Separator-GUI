@@ -1,0 +1,105 @@
+===============================================================================
+                       MUSIC SEPARATOR - MANUALE UTENTE                       
+                       MANUALE ITALIANO (IT)
+===============================================================================
+
+Benvenuto in Music separator, un potente strumento per la separazione audio 
+guidato dall'Intelligenza Artificiale, basato sulle architetture avanzate 
+Roformer e MDX. Questa applicazione ti consente di isolare voci, strumenti ed 
+elementi specifici con qualita' da studio di registrazione.
+
+1. INSTALLAZIONE
+-------------------------------------------------------------------------------
+WINDOWS:
+- Avvia 'install.bat' per creare l'ambiente virtuale e installare le dipendenze.
+- Usa 'run.bat' per lanciare l'applicazione.
+- Se non hai una scheda video NVIDIA dedicata, usa 'install_cpu.bat' e 'run_Cpu.bat'.
+
+macOS (Apple Silicon M1/M2/M3/M4):
+- Assicurati di avere gli strumenti essenziali di Xcode: 
+  apri il Terminale ed esegui 'xcode-select --install'
+- Assicurati di avere Homebrew installato: 
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+- Chiudi e riapri il terminale, quindi installa le dipendenze necessarie: 
+  brew install ffmpeg libsndfile python@3.12
+- Fai clic destro e scegli 'Apri' sul file 'install_mac.command' (o '.sh').
+- Usa 'run_mac.command' (o '.sh') per lanciare il programma.
+- (Se hai problemi di permessi, apri il Terminale nella cartella ed esegui 
+  'chmod +x *.command' o 'chmod +x *.sh').
+
+
+2. USO BASE (SINGOLO MODELLO)
+-------------------------------------------------------------------------------
+1. Seleziona il tuo file audio di input (WAV, FLAC, MP3, ecc.).
+2. Scegli una Cartella di Output.
+3. Seleziona un Modello dal menu a tendina (divisi per categoria: Voci, ecc.).
+4. Seleziona la profondita' di bit (16-bit e' standard, 32-bit e' alta qualita').
+5. Clicca su "Avvia Separazione".
+
+
+3. ENSEMBLE NATIVO (MIX DI MODELLI)
+-------------------------------------------------------------------------------
+Spunta la casella "Abilita Ensemble" per scegliere DUE modelli differenti. 
+L'applicazione elaborera' il file con entrambi e fondera' matematicamente i 
+risultati (tramite media o altro algoritmo) per ottenere un isolamento superiore.
+
+
+4. PRESET ENSEMBLE A CATENA (AVANZATO)
+-------------------------------------------------------------------------------
+Il menu a tendina "Preset" ti permette di eseguire processi "a catena", dove 
+l'output di un modello viene automaticamente passato a un altro. 
+(Nota: Selezionare un Preset annulla la scelta del modello singolo).
+
+PRESET DISPONIBILI:
+- Separazione Vocali: Separa Base/Voce, poi divide le Voci in Lead e Backing.
+- De-Reverb Vocali: Separa le Voci, poi isola la voce rimuovendo riverbero ed eco.
+- Ultimate Stems (7 Tracce): Estrae Voci e Base ad altissima qualita', poi divide 
+  la base in 5 tracce distinte (Basso, Batteria, Piano, Chitarra, Altro).
+- Separazione Voce Uomo/Donna: Isola specificamente voci maschili da femminili.
+- Restauro Live: Estrae il rumore del pubblico (Applausi), poi pulisce il 
+  restante audio del palco in Voce e Strumentale.
+- Prep Vocale RVC: Estrae la voce Lead pulita, isola la traccia di riverbero e 
+  lascia la base unita ai Cori. Ideale per clonazione vocale tramite RVC.
+
+
+5. MODELLI SPECIALIZZATI
+-------------------------------------------------------------------------------
+- Separazione Batteria (Drums): Separa i componenti in Cassa, Rullante, Tom e Piatti.
+- Respiri e Rumori Vocali: Isola i respiri e l'aria per pulizie chirurgiche.
+
+
+6. NOMI DI OUTPUT
+-------------------------------------------------------------------------------
+L'app aggiunge automaticamente suffissi per identificare facilmente le tracce:
+_Vocals, _Instrumental, _Lead, _Backing, _DeReverb, _Male, _Female, _Crowd.
+
+
+7. CHUNKING (FILE LUNGHI / PREVENZIONE OUT-OF-MEMORY)
+-------------------------------------------------------------------------------
+Se si verificano errori di Out-of-Memory (OOM) o crash con file audio lunghi,
+abilita l'opzione "Abilita Chunking". L'audio verra' diviso in segmenti della
+durata specificata, elaborati uno alla volta, e poi riassemblati automaticamente
+nell'output finale.
+
+- Spunta "Abilita Chunking" per attivare la funzione.
+- Seleziona la "Dimensione Chunk" dal menu (1 min, 2 min, ecc.). Default: 1 min.
+- Valori consigliati: 1 min per GPU con <6GB VRAM, 2-5 min per le altre.
+- Nota: il chunking puo' influire lievemente sulla qualita' ai bordi dei segmenti.
+
+
+8. ELABORAZIONE IN BATCH (MULTI-FILE)
+-------------------------------------------------------------------------------
+Puoi elaborare molteplici file audio automaticamente in sequenza.
+- Clicca su "Sfoglia" accanto al campo Audio in Ingresso.
+- Seleziona più file contemporaneamente (tenendo premuto Ctrl/Cmd o Shift).
+- La barra di input mostrerà i file scelti separati dal simbolo "|".
+- Imposta il modello o preset preferito, la cartella di output e clicca "Avvia".
+- Il programma eseguirà tutta l'elaborazione automaticamente su ciascun brano 
+  in ordine, salvando i risultati finali nella cartella di output.
+
+
+9. ACCELERAZIONE HARDWARE
+-------------------------------------------------------------------------------
+- Windows: Sfrutta CUDA (NVIDIA) o usa il semplice processore CPU.
+- macOS: Sfrutta la potenza dei processori Apple Silicon tramite le librerie 
+  MPS (Metal Performance Shaders) usando il Neural Engine.

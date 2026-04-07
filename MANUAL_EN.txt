@@ -1,0 +1,105 @@
+===============================================================================
+                       MUSIC SEPARATOR - USER MANUAL                       
+                       ENGLISH MANUAL (EN)
+===============================================================================
+
+Welcome to Music separator, a powerful AI-driven audio separation tool based on 
+the state-of-the-art Roformer and MDX architectures. This application allows 
+you to isolate vocals, instruments, and specific elements with studio quality.
+
+1. INSTALLATION
+-------------------------------------------------------------------------------
+WINDOWS:
+- Run 'install.bat' to create the environment and install dependencies.
+- Use 'run.bat' to launch the application.
+- If you don't have an NVIDIA GPU, use 'install_cpu.bat' and 'run_Cpu.bat'.
+
+macOS (Apple Silicon M1/M2/M3/M4):
+- Ensure you have the Xcode command line tools installed: 
+  open Terminal and run 'xcode-select --install'
+- Ensure you have Homebrew installed: 
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+- Restart the terminal, then install necessary dependencies via Terminal: 
+  brew install ffmpeg libsndfile python@3.12
+- Right-click and 'Open' the 'install_mac.command' (or '.sh') file.
+- Use 'run_mac.command' (or '.sh') to launch the app.
+- (If you have permission issues with scripts, open Terminal and run 
+  'chmod +x *.command' or 'chmod +x *.sh' in the app folder).
+
+
+2. BASIC USAGE (SINGLE MODEL)
+-------------------------------------------------------------------------------
+1. Select your input audio file (WAV, FLAC, MP3, etc.).
+2. Choose an Output Directory.
+3. Select a Model from the dropdown (categorized by type: Vocals, Drums, etc.).
+4. Select the output Bit Depth (16-bit is standard, 32-bit for high-end).
+5. Click "Start Separation".
+
+
+3. NATIVE ENSEMBLE (MIXING MODELS)
+-------------------------------------------------------------------------------
+Tick the "Ensemble" checkbox to select TWO different models. The application 
+will process the file with both and mathematically fuse the results (using 
+average, max, or min algorithms) for potentially better isolation.
+
+
+4. CHAINED ENSEMBLE PRESETS (ADVANCED)
+-------------------------------------------------------------------------------
+The "Preset" dropdown allows you to run "Chained" processes where the output 
+of one model is automatically fed into another. 
+(Note: Selecting a Preset overrides individual model selection).
+
+AVAILABLE PRESETS:
+- Vocal Split: Separates Vocals/Inst, then splits Vocals into Lead and Backing.
+- Vocal De-Reverb: Separates Vocals, then removes reverb/echo from the voice.
+- Ultimate Stems (7 Tracks): Extracts high-quality Vocals and Instrumental, 
+  then splits the instrumental into 5 parts (Bass, Drums, Piano, Guitar, Other).
+- Male/Female Split: Specifically isolates male vs. female voices.
+- Live Restore: Extracts the Crowd/Applause, then cleans the remaining stage 
+  audio into Vocals and Instrumental.
+- RVC Vocal Prep: Extracts the clean Lead vocal without reverb, isolates the 
+  Reverb track, and keeps the Instrumental with Backing Vocals for Voice 
+  Cloning preparation.
+
+
+5. SPECIALIZED MODELS
+-------------------------------------------------------------------------------
+- Drum Separation: Splitting drums into Kick, Snare, Toms, and Cymbals.
+- Aspiration: Isolate breaths and vocal "air" for surgical cleaning.
+
+
+6. OUTPUT FILENAMES
+-------------------------------------------------------------------------------
+The program uses clean suffixes for easy identification:
+_Vocals, _Instrumental, _Lead, _Backing, _DeReverb, _Male, _Female, _Crowd.
+
+
+7. CHUNKING (LONG FILES / OUT-OF-MEMORY PREVENTION)
+-------------------------------------------------------------------------------
+If you experience Out-of-Memory (OOM) errors or crashes with long audio files,
+enable the "Enable Chunking" option. The audio will be split into segments of
+the specified duration (in seconds), processed one chunk at a time, and then
+automatically reassembled into the full output file.
+
+- Check "Enable Chunking" to activate this feature.
+- Select the "Chunk Size" from the dropdown (1 min, 2 min, etc.). Default: 1 min.
+- Recommended values: 1 min for GPU with <6GB VRAM, 2-5 min for larger ones.
+- Note: Chunking may slightly affect separation quality at segment boundaries.
+
+
+8. BATCH PROCESSING (MULTI-FILE)
+-------------------------------------------------------------------------------
+You can process multiple audio files automatically in sequence.
+- Click "Browse" next to the Input Audio field.
+- Select multiple files (hold Ctrl/Cmd or Shift).
+- The input bar will display the selected files separated by a "|" symbol.
+- Choose your preferred model or preset, set the output directory, and click "Start".
+- The program will automatically run the full separation flow on each file 
+  sequentially, saving all results in your output folder.
+
+
+9. HARDWARE ACCELERATION
+-------------------------------------------------------------------------------
+- Windows: Uses CUDA (NVIDIA) or CPU.
+- macOS: Uses MPS (Metal Performance Shaders) on M-series chips for 
+  extremely fast processing via the Neural Engine.

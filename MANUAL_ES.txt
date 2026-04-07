@@ -1,0 +1,102 @@
+===============================================================================
+                       MUSIC SEPARATOR - MANUAL DE USUARIO                       
+                       MANUAL EN ESPAÑOL (ES)
+===============================================================================
+
+Bienvenido a Music separator, una potente herramienta de separacion de audio 
+controlada por Inteligencia Artificial y basada en arquitecturas Roformer y MDX. 
+Esta aplicacion te permite aislar voces, instrumentos y elementos especificos 
+con calidad de estudio.
+
+1. INSTALACIÓN
+-------------------------------------------------------------------------------
+WINDOWS:
+- Ejecuta 'install.bat' para crear el entorno e instalar dependencias.
+- Usa 'run.bat' para lanzar la aplicacion.
+- Si no tienes una tarjeta grafica NVIDIA, usa 'install_cpu.bat' y 'run_Cpu.bat'.
+
+macOS (Apple Silicon M1/M2/M3/M4):
+- Asegurate de tener instaladas las herramientas de comandos de Xcode: 
+  abre la Terminal y ejecuta 'xcode-select --install'
+- Asegurate de tener instalado Homebrew: 
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+- Cierra y abre la terminal, luego instala las dependencias necesarias: 
+  brew install ffmpeg libsndfile python@3.12
+- Haz clic derecho y selecciona 'Abrir' en el archivo 'install_mac.command' (o '.sh').
+- Usa 'run_mac.command' (o '.sh') para iniciar la app.
+- (Si tienes problemas de permisos, abre la Terminal en la carpeta de la app 
+  y ejecuta 'chmod +x *.command' o 'chmod +x *.sh').
+
+
+2. USO BÁSICO (MODELO ÚNICO)
+-------------------------------------------------------------------------------
+1. Seleccione su archivo de audio de entrada (WAV, FLAC, MP3, etc.).
+2. Elija un Directorio de Salida.
+3. Seleccione un Modelo del menu (categorizado por tipo: Voces, Bateria, etc.).
+4. Seleccione la profundidad de bits (16 bits estandar, 32 bits alta calidad).
+5. Haz clic en "Iniciar Separacion".
+
+
+3. ENSEMBLE NATIVO (FUSIÓN DE MODELOS)
+-------------------------------------------------------------------------------
+Marca la casilla "Ensemble" para seleccionar DOS modelos diferentes. La 
+aplicacion procesara el archivo con ambos y fusionara matematicamente los 
+resultados para lograr un mejor aislamiento.
+
+
+4. PRESETS ENSEMBLE EN CADENA (AVANZADOS)
+-------------------------------------------------------------------------------
+El menu "Preajustes" permite ejecutar procesos "ensamblados" donde la salida 
+de un modelo pasa de forma automatica al siguiente. 
+(Nota: Seleccionar un Preset desactiva la seleccion manual de modelo).
+
+PRESETS DISPONIBLES:
+- Separacion Vocal: Separa Base/Voz, luego divide las Voces en Lead y Backing.
+- De-Reverb Vocal: Extrae las Voces y luego elimina la reverberacion y el eco.
+- Stems Definitivos (7 Pistas): Extrae Voces e Instrumental de extrema calidad, 
+  y luego divide el instrumental en 5 partes (Bajo, Bateria, Piano, etc.).
+- Separacion Voz Masculina/Femenina: Aisla voces masculinas frente a femeninas.
+- Restauracion de Vivo: Extrae el ruido del publico, luego limpia el audio 
+  del escenario separandolo en Voz e Instrumental.
+- Prep Vocal RVC: Extrae la voz principal (Lead) limpia sin reverberacion, aisla 
+  la pista de Reverb, y retiene la Instrumental + Coros. Ideal para covers RVC.
+
+
+5. MODELOS ESPECIALIZADOS Y ARCHIVOS DE SALIDA
+-------------------------------------------------------------------------------
+- Separacion de Bateria: Divide la bateria en Bombo, Caja, Toms y Platillos.
+- Respiraciones: Aisla suspiros y el "aire" vocal para limpiezas profundas.
+- Nombres de Archivos: Al procesar audio, el programa usara sufijos claros 
+  para cada pista (_Vocals, _Instrumental, _Lead, _Backing, _DeReverb, _Male, 
+  _Female, _Crowd).
+
+
+6. SEGMENTACIÓN (ARCHIVOS LARGOS / PREVENCIÓN OOM)
+-------------------------------------------------------------------------------
+Si experimentas errores de Out-of-Memory (OOM) o cierres inesperados con
+archivos de audio largos, activa la opcion "Activar Segmentacion". El audio
+se dividira en segmentos de la duracion indicada, se procesaran de uno en uno,
+y luego se volvera a ensamblar automaticamente en el archivo de salida final.
+
+- Marca "Activar Segmentacion" para activar la funcion.
+- Configura el "Tamaño del Segmento" en el menú (1 min, 2 min, etc). Predeterminado: 1 min.
+- Valores recomendados: 1 min para GPU con <6GB VRAM, 2-5 min para otras.
+- Nota: la segmentacion puede afectar ligeramente la calidad en los bordes.
+
+
+8. PROCESAMIENTO POR LOTES (MULTI-ARCHIVO)
+-------------------------------------------------------------------------------
+Puedes procesar múltiples archivos de audio automáticamente en secuencia.
+- Haz clic en "Buscar" junto al campo de Audio de Entrada.
+- Selecciona múltiples archivos a la vez (manteniendo pulsado Ctrl/Cmd o Shift).
+- La barra de entrada mostrará los archivos seleccionados separados por un símbolo "|".
+- Configura tu modelo o preset preferido, el directorio de salida y haz clic en "Iniciar".
+- El programa ejecutará la separación completa en cada pista secuencialmente, 
+  guardando todos los resultados en tu carpeta de salida.
+
+
+9. ACELERACIÓN DE HARDWARE
+-------------------------------------------------------------------------------
+- Windows: Utiliza tu tarjeta grafica NVIDIA con aceleracion CUDA o CPU.
+- macOS: Utiliza MPS (Metal Performance Shaders) en chips de la serie M para 
+  un procesamiento extremadamente rapido a traves del Motor Neuronal.

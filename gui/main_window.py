@@ -343,6 +343,24 @@ class MainWindow(wx.Frame):
 
         vbox.Add(hbox4, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
 
+        # --- Chunk Duration ---
+        self.chunk_values = [60, 120, 300, 600, 900, 1200]
+        self.chunk_choices = ["1 min", "2 min", "5 min", "10 min", "15 min", "20 min"]
+        hbox_chunk = wx.BoxSizer(wx.HORIZONTAL)
+        self.chk_chunk = wx.CheckBox(self.panel, label=i18n.tr("chunk_enable"))
+        self.chk_chunk.SetValue(False)
+        self.chk_chunk.Bind(wx.EVT_CHECKBOX, self.OnChunkCheck)
+        hbox_chunk.Add(self.chk_chunk, flag=wx.ALIGN_CENTER_VERTICAL)
+        hbox_chunk.AddStretchSpacer(prop=1)
+        self.st_chunk_dur = wx.StaticText(self.panel, label=i18n.tr("chunk_duration_label"))
+        self.st_chunk_dur.Disable()
+        hbox_chunk.Add(self.st_chunk_dur, flag=wx.RIGHT|wx.ALIGN_CENTER_VERTICAL, border=8)
+        self.cb_chunk = wx.ComboBox(self.panel, choices=self.chunk_choices, style=wx.CB_DROPDOWN | wx.CB_READONLY, size=(90, -1))
+        self.cb_chunk.SetSelection(0)  # Default: 1 min
+        self.cb_chunk.Disable()
+        hbox_chunk.Add(self.cb_chunk, flag=wx.ALIGN_CENTER_VERTICAL)
+        vbox.Add(hbox_chunk, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
+
         # --- Buttons ---
         hbox5 = wx.BoxSizer(wx.HORIZONTAL)
         self.btn_start = wx.Button(self.panel, label=i18n.tr("start_separation"))
@@ -389,6 +407,15 @@ class MainWindow(wx.Frame):
             self.st_preset.Show()
         self.panel.Layout()
 
+    def OnChunkCheck(self, event):
+        is_checked = self.chk_chunk.GetValue()
+        if is_checked:
+            self.st_chunk_dur.Enable()
+            self.cb_chunk.Enable()
+        else:
+            self.st_chunk_dur.Disable()
+            self.cb_chunk.Disable()
+
     def OnPresetChange(self, event):
         idx = self.cb_preset.GetSelection()
         preset_key = self.preset_keys[idx]
@@ -412,6 +439,8 @@ class MainWindow(wx.Frame):
         self.cb_ens_algo.SetToolTip(i18n.tr("ensemble_algorithm_tooltip"))
         self.chk_gpu.SetLabel(i18n.tr("use_gpu"))
         self.st_format.SetLabel(i18n.tr("output_format"))
+        self.chk_chunk.SetLabel(i18n.tr("chunk_enable"))
+        self.st_chunk_dur.SetLabel(i18n.tr("chunk_duration_label"))
         self.btn_start.SetLabel(i18n.tr("start_separation"))
         self.btn_stop.SetLabel(i18n.tr("stop"))
         self.st_log.SetLabel(i18n.tr("logs"))
@@ -435,11 +464,12 @@ class MainWindow(wx.Frame):
         self.UpdateLabels()
 
     def OnBrowseInput(self, event):
-        with wx.FileDialog(self, "Open Audio file", wildcard="Audio files (*.mp3;*.wav;*.flac;*.m4a)|*.mp3;*.wav;*.flac;*.m4a",
-                           style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as fileDialog:
+        with wx.FileDialog(self, "Open Audio file(s)", wildcard="Audio files (*.mp3;*.wav;*.flac;*.m4a)|*.mp3;*.wav;*.flac;*.m4a",
+                           style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE) as fileDialog:
             if fileDialog.ShowModal() == wx.ID_CANCEL:
                 return
-            self.tc_input.SetValue(fileDialog.GetPath())
+            paths = fileDialog.GetPaths()
+            self.tc_input.SetValue("|".join(paths))
 
     def OnBrowseOutput(self, event):
         with wx.DirDialog(self, "Choose Output Directory",
@@ -517,11 +547,16 @@ class MainWindow(wx.Frame):
         return target_model_filename
 
     def OnStart(self, event):
-        input_path = self.tc_input.GetValue()
+        input_string = self.tc_input.GetValue()
         output_dir = self.tc_output.GetValue()
         model_name = self.cb_model.GetValue()
 
-        if not input_path or not os.path.exists(input_path):
+        if not input_string:
+            wx.MessageBox(i18n.tr("msg_select_input"), "Error", wx.OK | wx.ICON_ERROR)
+            return
+            
+        input_files = [p.strip() for p in input_string.split("|") if os.path.exists(p.strip())]
+        if not input_files:
             wx.MessageBox(i18n.tr("msg_select_input"), "Error", wx.OK | wx.ICON_ERROR)
             return
 
@@ -531,6 +566,12 @@ class MainWindow(wx.Frame):
             except OSError:
                 wx.MessageBox(i18n.tr("msg_create_output_err"), "Error", wx.OK | wx.ICON_ERROR)
                 return
+
+        # Resolve chunk_duration
+        chunk_duration = None
+        if self.chk_chunk.GetValue():
+            idx = self.cb_chunk.GetSelection()
+            chunk_duration = self.chunk_values[idx] if idx != wx.NOT_FOUND else 60
 
         self.tc_log.Clear()
         self.gauge.SetValue(0)
@@ -559,7 +600,7 @@ class MainWindow(wx.Frame):
                 self.btn_stop.Disable()
                 return
 
-            self.worker = SeparationThread(self, input_path, output_dir, target_model_filename, self.chk_gpu.GetValue(), out_format, target_model_filename_2, preset_config)
+            self.worker = SeparationThread(self, input_files, output_dir, target_model_filename, self.chk_gpu.GetValue(), out_format, target_model_filename_2, preset_config, chunk_duration=chunk_duration)
             self.worker.start()
             return
             
@@ -581,7 +622,7 @@ class MainWindow(wx.Frame):
                 return
             ensemble_algorithm = self.cb_ens_algo.GetValue()
 
-        self.worker = SeparationThread(self, input_path, output_dir, target_model_filename, self.chk_gpu.GetValue(), out_format, target_model_filename_2, ensemble_algorithm=ensemble_algorithm)
+        self.worker = SeparationThread(self, input_files, output_dir, target_model_filename, self.chk_gpu.GetValue(), out_format, target_model_filename_2, ensemble_algorithm=ensemble_algorithm, chunk_duration=chunk_duration)
         self.worker.start()
 
     def OnStop(self, event):

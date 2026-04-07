@@ -45,3 +45,9 @@ Log.txt
 # Binaries
 ffmpeg_bin/
 ffprobe_bin/
+
+# Temporary and Release files
+*.7z
+*.zip
+Mac/
+refactor.py

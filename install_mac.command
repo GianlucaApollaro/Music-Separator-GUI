@@ -30,7 +30,7 @@ echo "• Installing PyTorch optimized for Apple Silicon (MPS)..."
 pip install torch torchvision torchaudio
 
 echo "• Installing application requirements..."
-pip install --no-cache-dir -r requirements.txt
+pip install --no-cache-dir -r requirements_mac.txt
 
 echo "• Installing PyInstaller (optional for builds)..."
 pip install pyinstaller

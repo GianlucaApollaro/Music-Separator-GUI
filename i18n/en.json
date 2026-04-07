@@ -44,5 +44,7 @@
     "preset_crowd_live": "Live Restore (Crowd + Vocal + Inst)",
     "preset_vocal_rvc": "RVC Vocal Prep (Lead Clean + Reverb + Instrumental/BVs)",
     "ensemble_algorithm": "Ensemble Algorithm:",
-    "ensemble_algorithm_tooltip": "Algorithm used to fuse the two models' outputs"
+    "ensemble_algorithm_tooltip": "Algorithm used to fuse the two models' outputs",
+    "chunk_enable": "Enable Chunking (for long files / OOM prevention)",
+    "chunk_duration_label": "Chunk Size:"
 }

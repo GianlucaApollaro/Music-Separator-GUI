@@ -82,10 +82,10 @@ class GuiLogHandler(logging.Handler):
             raise KeyboardInterrupt("Stopped by user")
 
 class SeparationThread(threading.Thread):
-    def __init__(self, parent, input_file, output_dir, model_name, use_gpu=True, output_format="WAV", model_name_2=None, preset_config=None, ensemble_algorithm="avg_wave"):
+    def __init__(self, parent, input_files, output_dir, model_name, use_gpu=True, output_format="WAV", model_name_2=None, preset_config=None, ensemble_algorithm="avg_wave", chunk_duration=None):
         super().__init__()
         self.parent = parent
-        self.input_file = input_file
+        self.input_files = input_files
         self.output_dir = output_dir
         self.model_name = model_name
         self.use_gpu = use_gpu
@@ -93,6 +93,7 @@ class SeparationThread(threading.Thread):
         self.model_name_2 = model_name_2
         self.preset_config = preset_config
         self.ensemble_algorithm = ensemble_algorithm
+        self.chunk_duration = chunk_duration
         self._stop_event = threading.Event()
 
     def run(self):
@@ -122,40 +123,244 @@ class SeparationThread(threading.Thread):
             logger.addHandler(handler)
 
             self.post_log(i18n.tr("status_initializing", model=self.model_name))
-            
+
+            if self.chunk_duration:
+                self.post_log(f"Chunking enabled: {self.chunk_duration}s per segment.")
+
             separator = Separator(
                 log_level=logging.INFO,
                 model_file_dir=os.path.join(os.getcwd(), 'models'),
-                output_dir=self.output_dir
+                output_dir=self.output_dir,
+                chunk_duration=self.chunk_duration
             )
 
-            if self.preset_config:
-                preset_type = self.preset_config.get("type", "chain")
+            total_files = len(self.input_files)
+            for file_idx, current_input_file in enumerate(self.input_files, 1):
+                if self._stop_event.is_set():
+                    break
+                self.post_log(f"\n--- Processing file {file_idx}/{total_files} ---")
+                self.post_log(f"File: {current_input_file}")
+                if self.preset_config:
+                    preset_type = self.preset_config.get("type", "chain")
 
-                if preset_type == "ensemble":
-                    # ====== PRESET ENSEMBLE (2-Pass + Local Mixing) ======
+                    if preset_type == "ensemble":
+                        # ====== PRESET ENSEMBLE (2-Pass + Local Mixing) ======
+                        import tempfile
+                        import shutil
+                        import soundfile as sf
+                        import numpy as np
+                        import re
+
+                        algorithm = self.preset_config.get("algorithm", "avg_wave")
+                        temp_dir_1 = tempfile.mkdtemp(dir=self.output_dir, prefix="ens_1_")
+                        temp_dir_2 = tempfile.mkdtemp(dir=self.output_dir, prefix="ens_2_")
+                        base_input_name = os.path.splitext(os.path.basename(current_input_file))[0]
+
+                        def get_stem_clean_ens(filename):
+                            basename = os.path.basename(filename)
+                            base = os.path.splitext(basename)[0]
+                            matches = re.findall(r"_\(([^)]+)\)", base)
+                            if matches:
+                                s = matches[-1].lower()
+                            else:
+                                parts = base.split("_")
+                                s = parts[-1].lower().strip("()") if parts else base.lower()
+                            return "instrumental" if s == "other" else s
+
+                        def blend(a, b, algo):
+                            if algo == "min_wave":
+                                return np.minimum(a, b)
+                            elif algo == "max_wave":
+                                return np.maximum(a, b)
+                            elif algo == "median_wave":
+                                return np.median(np.stack([a, b]), axis=0)
+                            else:  # avg_wave (default)
+                                return (a + b) / 2.0
+
+                        # Pass 1
+                        self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 1: {self.preset_config['model_1']})")
+                        separator.output_dir = temp_dir_1
+                        separator.load_model(model_filename=self.preset_config["model_1"])
+                        old_stderr = sys.stderr
+                        sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
+                        try:
+                            output_files_1 = separator.separate(current_input_file)
+                        finally:
+                            sys.stderr = old_stderr
+
+                        # Pass 2
+                        self.post_progress(0)
+                        self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 2: {self.preset_config['model_2']})")
+                        separator.output_dir = temp_dir_2
+                        separator.load_model(model_filename=self.preset_config["model_2"])
+                        old_stderr = sys.stderr
+                        sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
+                        try:
+                            output_files_2 = separator.separate(current_input_file)
+                        finally:
+                            sys.stderr = old_stderr
+
+                        # Blending
+                        self.post_log(i18n.tr("status_ensemble_mixing") + f" [{algorithm}]")
+                        final_outputs = []
+                        for f1 in output_files_1:
+                            stem1 = get_stem_clean_ens(f1)
+                            match_2 = [f for f in output_files_2 if get_stem_clean_ens(f) == stem1]
+                            clean_ext = os.path.splitext(f1)[1]
+                            if match_2:
+                                d1, sr1 = sf.read(os.path.join(temp_dir_1, f1))
+                                d2, _ = sf.read(os.path.join(temp_dir_2, match_2[0]))
+                                min_len = min(len(d1), len(d2))
+                                mixed = blend(d1[:min_len], d2[:min_len], algorithm)
+                                out_name = f"{base_input_name}_(Ensemble_{stem1.capitalize()}){clean_ext}"
+                                sf.write(os.path.join(self.output_dir, out_name), mixed, sr1)
+                                final_outputs.append(out_name)
+                            else:
+                                out_name = f"{base_input_name}_(Ensemble_{stem1.capitalize()}_M1){clean_ext}"
+                                shutil.copy(os.path.join(temp_dir_1, f1), os.path.join(self.output_dir, out_name))
+                                final_outputs.append(out_name)
+
+                        shutil.rmtree(temp_dir_1, ignore_errors=True)
+                        shutil.rmtree(temp_dir_2, ignore_errors=True)
+                        output_files = final_outputs
+                        self.post_log(i18n.tr("status_ensemble_done"))
+
+                    else:
+                        # ====== CHAINED PRESET MULTI-PASS ======
+                        import tempfile
+                        import shutil
+                        import re
+
+                        temp_dir_1 = tempfile.mkdtemp(dir=self.output_dir, prefix="chain_1_")
+                        temp_dir_2 = tempfile.mkdtemp(dir=self.output_dir, prefix="chain_2_")
+                    
+                        base_input_name = os.path.splitext(os.path.basename(current_input_file))[0]
+                        final_outputs = []
+                    
+                        def get_stem_clean(filename):
+                            basename = os.path.basename(filename)
+                            base = os.path.splitext(basename)[0]
+                            matches = re.findall(r"_\(([^)]+)\)", base)
+                            if matches:
+                                stem = matches[-1].lower()
+                            else:
+                                parts = base.split("_")
+                                stem = parts[-1].lower().strip("()") if parts else base.lower()
+                            return stem
+                    
+                        # Model 1
+                        self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 1: {self.preset_config['model_1']})")
+                        separator.output_dir = temp_dir_1
+                        separator.load_model(model_filename=self.preset_config['model_1'])
+                    
+                        old_stderr = sys.stderr
+                        sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
+                        try:
+                            output_files_1 = separator.separate(current_input_file)
+                        finally:
+                            sys.stderr = old_stderr
+
+                        pass_file_path = None
+                        pass_stem = self.preset_config["pass_stem"].lower()
+                    
+                        for f1 in output_files_1:
+                            stem1 = get_stem_clean(f1)
+                            clean_ext = os.path.splitext(f1)[1]
+                        
+                            # Tratta 'other' e 'instrumental' come sinonimi per la decisione di quale stelo passare al M2
+                            stem_match = (stem1 == pass_stem) or (stem1 in ["other", "instrumental"] and pass_stem in ["other", "instrumental"])
+                        
+                            if stem_match:
+                                pass_file_path = os.path.join(temp_dir_1, f1)
+                                if "m1_keep_pass_stem_name" in self.preset_config:
+                                    suffix = self.preset_config["m1_keep_pass_stem_name"]
+                                    out_name = f"{base_input_name}{suffix}{clean_ext}"
+                                    final_path = os.path.join(self.output_dir, out_name)
+                                    shutil.copy(os.path.join(temp_dir_1, f1), final_path)
+                                    final_outputs.append(out_name)
+                            else:
+                                suffix = self.preset_config.get("m1_keep_name", "_Instrumental")
+                                out_name = f"{base_input_name}{suffix}{clean_ext}"
+                                final_path = os.path.join(self.output_dir, out_name)
+                                shutil.copy(os.path.join(temp_dir_1, f1), final_path)
+                                final_outputs.append(out_name)
+                            
+                        if pass_file_path:
+                            # Model 2
+                            self.post_progress(0)
+                            self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 2: {self.preset_config['model_2']})")
+                            separator.output_dir = temp_dir_2
+                            separator.load_model(model_filename=self.preset_config['model_2'])
+                        
+                            old_stderr = sys.stderr
+                            sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
+                            try:
+                                output_files_2 = separator.separate(pass_file_path)
+                            finally:
+                                sys.stderr = old_stderr
+                            
+                            for f2 in output_files_2:
+                                stem2 = get_stem_clean(f2)
+                                clean_ext = os.path.splitext(f2)[1]
+                            
+                                rename_map = self.preset_config.get("m2_rename_map", {})
+                                if stem2 in rename_map:
+                                    suffix = rename_map[stem2]
+                                    if not suffix:  # If mapped to None or "", discard the stem
+                                        continue
+                                else:
+                                    suffix = f"_{stem2.capitalize()}"
+                                
+                                out_name = f"{base_input_name}{suffix}{clean_ext}"
+                                final_path = os.path.join(self.output_dir, out_name)
+                                shutil.copy(os.path.join(temp_dir_2, f2), final_path)
+                                final_outputs.append(out_name)
+                        else:
+                            self.post_log(f"Warning: Could not find '{pass_stem}' stem from Pass 1 to feed into Pass 2.")
+                    
+                        shutil.rmtree(temp_dir_1, ignore_errors=True)
+                        shutil.rmtree(temp_dir_2, ignore_errors=True)
+                    
+                        output_files = final_outputs
+                        self.post_log(i18n.tr("status_ensemble_done"))
+
+                elif not self.model_name_2:
+                    # ====== STANDARD SINGLE MODEL PASS ======
+                    self.post_log(i18n.tr("status_loading"))
+                    separator.load_model(model_filename=self.model_name)
+                    self.post_log(i18n.tr("status_starting", file=os.path.basename(current_input_file)))
+                
+                    old_stderr = sys.stderr
+                    sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
+                    try:
+                        output_files = separator.separate(current_input_file)
+                    finally:
+                        sys.stderr = old_stderr
+                else:
+                    # ====== ENSEMBLE DUAL MODEL PASS (2-Pass + Local Mixing) ======
                     import tempfile
                     import shutil
                     import soundfile as sf
                     import numpy as np
                     import re
 
-                    algorithm = self.preset_config.get("algorithm", "avg_wave")
+                    algorithm = self.ensemble_algorithm
                     temp_dir_1 = tempfile.mkdtemp(dir=self.output_dir, prefix="ens_1_")
                     temp_dir_2 = tempfile.mkdtemp(dir=self.output_dir, prefix="ens_2_")
-                    base_input_name = os.path.splitext(os.path.basename(self.input_file))[0]
+                    base_input_name = os.path.splitext(os.path.basename(current_input_file))[0]
 
-                    def get_stem_clean_ens(filename):
-                        matches = re.findall(r"_\((.*?)\)_", filename)
+                    def get_stem_clean_m(filename):
+                        basename = os.path.basename(filename)
+                        base = os.path.splitext(basename)[0]
+                        matches = re.findall(r"_\(([^)]+)\)", base)
                         if matches:
                             s = matches[-1].lower()
                         else:
-                            base = os.path.splitext(filename)[0]
                             parts = base.split("_")
-                            s = parts[-1].lower() if parts else base.lower()
+                            s = parts[-1].lower().strip("()") if parts else base.lower()
                         return "instrumental" if s == "other" else s
 
-                    def blend(a, b, algo):
+                    def blend_m(a, b, algo):
                         if algo == "min_wave":
                             return np.minimum(a, b)
                         elif algo == "max_wave":
@@ -166,25 +371,25 @@ class SeparationThread(threading.Thread):
                             return (a + b) / 2.0
 
                     # Pass 1
-                    self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 1: {self.preset_config['model_1']})")
+                    self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 1: {self.model_name})")
                     separator.output_dir = temp_dir_1
-                    separator.load_model(model_filename=self.preset_config["model_1"])
+                    separator.load_model(model_filename=self.model_name)
                     old_stderr = sys.stderr
                     sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
                     try:
-                        output_files_1 = separator.separate(self.input_file)
+                        output_files_1 = separator.separate(current_input_file)
                     finally:
                         sys.stderr = old_stderr
 
                     # Pass 2
                     self.post_progress(0)
-                    self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 2: {self.preset_config['model_2']})")
+                    self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 2: {self.model_name_2})")
                     separator.output_dir = temp_dir_2
-                    separator.load_model(model_filename=self.preset_config["model_2"])
+                    separator.load_model(model_filename=self.model_name_2)
                     old_stderr = sys.stderr
                     sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
                     try:
-                        output_files_2 = separator.separate(self.input_file)
+                        output_files_2 = separator.separate(current_input_file)
                     finally:
                         sys.stderr = old_stderr
 
@@ -192,14 +397,14 @@ class SeparationThread(threading.Thread):
                     self.post_log(i18n.tr("status_ensemble_mixing") + f" [{algorithm}]")
                     final_outputs = []
                     for f1 in output_files_1:
-                        stem1 = get_stem_clean_ens(f1)
-                        match_2 = [f for f in output_files_2 if get_stem_clean_ens(f) == stem1]
+                        stem1 = get_stem_clean_m(f1)
+                        match_2 = [f for f in output_files_2 if get_stem_clean_m(f) == stem1]
                         clean_ext = os.path.splitext(f1)[1]
                         if match_2:
                             d1, sr1 = sf.read(os.path.join(temp_dir_1, f1))
                             d2, _ = sf.read(os.path.join(temp_dir_2, match_2[0]))
                             min_len = min(len(d1), len(d2))
-                            mixed = blend(d1[:min_len], d2[:min_len], algorithm)
+                            mixed = blend_m(d1[:min_len], d2[:min_len], algorithm)
                             out_name = f"{base_input_name}_(Ensemble_{stem1.capitalize()}){clean_ext}"
                             sf.write(os.path.join(self.output_dir, out_name), mixed, sr1)
                             final_outputs.append(out_name)
@@ -207,241 +412,50 @@ class SeparationThread(threading.Thread):
                             out_name = f"{base_input_name}_(Ensemble_{stem1.capitalize()}_M1){clean_ext}"
                             shutil.copy(os.path.join(temp_dir_1, f1), os.path.join(self.output_dir, out_name))
                             final_outputs.append(out_name)
-
-                    shutil.rmtree(temp_dir_1, ignore_errors=True)
-                    shutil.rmtree(temp_dir_2, ignore_errors=True)
-                    output_files = final_outputs
-                    self.post_log(i18n.tr("status_ensemble_done"))
-
-                else:
-                    # ====== CHAINED PRESET MULTI-PASS ======
-                    import tempfile
-                    import shutil
-                    import re
-
-                    temp_dir_1 = tempfile.mkdtemp(dir=self.output_dir, prefix="chain_1_")
-                    temp_dir_2 = tempfile.mkdtemp(dir=self.output_dir, prefix="chain_2_")
-                    
-                    base_input_name = os.path.splitext(os.path.basename(self.input_file))[0]
-                    final_outputs = []
-                    
-                    def get_stem_clean(filename):
-                        matches = re.findall(r"_\((.*?)\)_", filename)
-                        if matches:
-                            stem = matches[-1].lower()
-                        else:
-                            base = os.path.splitext(filename)[0]
-                            parts = base.split("_")
-                            stem = parts[-1].lower() if parts else base.lower()
-                        return stem
-                    
-                    # Model 1
-                    self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 1: {self.preset_config['model_1']})")
-                    separator.output_dir = temp_dir_1
-                    separator.load_model(model_filename=self.preset_config['model_1'])
-                    
-                    old_stderr = sys.stderr
-                    sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
-                    try:
-                        output_files_1 = separator.separate(self.input_file)
-                    finally:
-                        sys.stderr = old_stderr
-
-                    pass_file_path = None
-                    pass_stem = self.preset_config["pass_stem"].lower()
-                    
-                    for f1 in output_files_1:
-                        stem1 = get_stem_clean(f1)
-                        clean_ext = os.path.splitext(f1)[1]
-                        
-                        # Tratta 'other' e 'instrumental' come sinonimi per la decisione di quale stelo passare al M2
-                        stem_match = (stem1 == pass_stem) or (stem1 in ["other", "instrumental"] and pass_stem in ["other", "instrumental"])
-                        
-                        if stem_match:
-                            pass_file_path = os.path.join(temp_dir_1, f1)
-                            if "m1_keep_pass_stem_name" in self.preset_config:
-                                suffix = self.preset_config["m1_keep_pass_stem_name"]
-                                out_name = f"{base_input_name}{suffix}{clean_ext}"
-                                final_path = os.path.join(self.output_dir, out_name)
-                                shutil.copy(os.path.join(temp_dir_1, f1), final_path)
-                                final_outputs.append(out_name)
-                        else:
-                            suffix = self.preset_config.get("m1_keep_name", "_Instrumental")
-                            out_name = f"{base_input_name}{suffix}{clean_ext}"
-                            final_path = os.path.join(self.output_dir, out_name)
-                            shutil.copy(os.path.join(temp_dir_1, f1), final_path)
-                            final_outputs.append(out_name)
-                            
-                    if pass_file_path:
-                        # Model 2
-                        self.post_progress(0)
-                        self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 2: {self.preset_config['model_2']})")
-                        separator.output_dir = temp_dir_2
-                        separator.load_model(model_filename=self.preset_config['model_2'])
-                        
-                        old_stderr = sys.stderr
-                        sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
-                        try:
-                            output_files_2 = separator.separate(pass_file_path)
-                        finally:
-                            sys.stderr = old_stderr
-                            
-                        for f2 in output_files_2:
-                            stem2 = get_stem_clean(f2)
+                    # Stems only in M2
+                    for f2 in output_files_2:
+                        stem2 = get_stem_clean_m(f2)
+                        if not any(get_stem_clean_m(f) == stem2 for f in output_files_1):
                             clean_ext = os.path.splitext(f2)[1]
-                            
-                            rename_map = self.preset_config.get("m2_rename_map", {})
-                            if stem2 in rename_map:
-                                suffix = rename_map[stem2]
-                                if not suffix:  # If mapped to None or "", discard the stem
-                                    continue
-                            else:
-                                suffix = f"_{stem2.capitalize()}"
-                                
-                            out_name = f"{base_input_name}{suffix}{clean_ext}"
-                            final_path = os.path.join(self.output_dir, out_name)
-                            shutil.copy(os.path.join(temp_dir_2, f2), final_path)
+                            out_name = f"{base_input_name}_(Ensemble_{stem2.capitalize()}_M2){clean_ext}"
+                            shutil.copy(os.path.join(temp_dir_2, f2), os.path.join(self.output_dir, out_name))
                             final_outputs.append(out_name)
-                    else:
-                        self.post_log(f"Warning: Could not find '{pass_stem}' stem from Pass 1 to feed into Pass 2.")
-                    
+
                     shutil.rmtree(temp_dir_1, ignore_errors=True)
                     shutil.rmtree(temp_dir_2, ignore_errors=True)
-                    
                     output_files = final_outputs
                     self.post_log(i18n.tr("status_ensemble_done"))
-
-            elif not self.model_name_2:
-                # ====== STANDARD SINGLE MODEL PASS ======
-                self.post_log(i18n.tr("status_loading"))
-                separator.load_model(model_filename=self.model_name)
-                self.post_log(i18n.tr("status_starting", file=os.path.basename(self.input_file)))
-                
-                old_stderr = sys.stderr
-                sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
-                try:
-                    output_files = separator.separate(self.input_file)
-                finally:
-                    sys.stderr = old_stderr
-            else:
-                # ====== ENSEMBLE DUAL MODEL PASS (2-Pass + Local Mixing) ======
-                import tempfile
-                import shutil
-                import soundfile as sf
-                import numpy as np
-                import re
-
-                algorithm = self.ensemble_algorithm
-                temp_dir_1 = tempfile.mkdtemp(dir=self.output_dir, prefix="ens_1_")
-                temp_dir_2 = tempfile.mkdtemp(dir=self.output_dir, prefix="ens_2_")
-                base_input_name = os.path.splitext(os.path.basename(self.input_file))[0]
-
-                def get_stem_clean_m(filename):
-                    matches = re.findall(r"_\((.*?)\)_", filename)
-                    if matches:
-                        s = matches[-1].lower()
-                    else:
-                        base = os.path.splitext(filename)[0]
-                        parts = base.split("_")
-                        s = parts[-1].lower() if parts else base.lower()
-                    return "instrumental" if s == "other" else s
-
-                def blend_m(a, b, algo):
-                    if algo == "min_wave":
-                        return np.minimum(a, b)
-                    elif algo == "max_wave":
-                        return np.maximum(a, b)
-                    elif algo == "median_wave":
-                        return np.median(np.stack([a, b]), axis=0)
-                    else:  # avg_wave (default)
-                        return (a + b) / 2.0
-
-                # Pass 1
-                self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 1: {self.model_name})")
-                separator.output_dir = temp_dir_1
-                separator.load_model(model_filename=self.model_name)
-                old_stderr = sys.stderr
-                sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
-                try:
-                    output_files_1 = separator.separate(self.input_file)
-                finally:
-                    sys.stderr = old_stderr
-
-                # Pass 2
-                self.post_progress(0)
-                self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 2: {self.model_name_2})")
-                separator.output_dir = temp_dir_2
-                separator.load_model(model_filename=self.model_name_2)
-                old_stderr = sys.stderr
-                sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
-                try:
-                    output_files_2 = separator.separate(self.input_file)
-                finally:
-                    sys.stderr = old_stderr
-
-                # Blending
-                self.post_log(i18n.tr("status_ensemble_mixing") + f" [{algorithm}]")
-                final_outputs = []
-                for f1 in output_files_1:
-                    stem1 = get_stem_clean_m(f1)
-                    match_2 = [f for f in output_files_2 if get_stem_clean_m(f) == stem1]
-                    clean_ext = os.path.splitext(f1)[1]
-                    if match_2:
-                        d1, sr1 = sf.read(os.path.join(temp_dir_1, f1))
-                        d2, _ = sf.read(os.path.join(temp_dir_2, match_2[0]))
-                        min_len = min(len(d1), len(d2))
-                        mixed = blend_m(d1[:min_len], d2[:min_len], algorithm)
-                        out_name = f"{base_input_name}_(Ensemble_{stem1.capitalize()}){clean_ext}"
-                        sf.write(os.path.join(self.output_dir, out_name), mixed, sr1)
-                        final_outputs.append(out_name)
-                    else:
-                        out_name = f"{base_input_name}_(Ensemble_{stem1.capitalize()}_M1){clean_ext}"
-                        shutil.copy(os.path.join(temp_dir_1, f1), os.path.join(self.output_dir, out_name))
-                        final_outputs.append(out_name)
-                # Stems only in M2
-                for f2 in output_files_2:
-                    stem2 = get_stem_clean_m(f2)
-                    if not any(get_stem_clean_m(f) == stem2 for f in output_files_1):
-                        clean_ext = os.path.splitext(f2)[1]
-                        out_name = f"{base_input_name}_(Ensemble_{stem2.capitalize()}_M2){clean_ext}"
-                        shutil.copy(os.path.join(temp_dir_2, f2), os.path.join(self.output_dir, out_name))
-                        final_outputs.append(out_name)
-
-                shutil.rmtree(temp_dir_1, ignore_errors=True)
-                shutil.rmtree(temp_dir_2, ignore_errors=True)
-                output_files = final_outputs
-                self.post_log(i18n.tr("status_ensemble_done"))
             
-            if self.output_format != "WAV":
-                new_files = []
-                for file in output_files:
-                    try:
-                        old_path = os.path.join(self.output_dir, file)
-                        base, _ = os.path.splitext(file)
-                        new_ext = f".{self.output_format.lower()}"
-                        new_filename = f"{base}{new_ext}"
-                        new_path = os.path.join(self.output_dir, new_filename)
+                if self.output_format != "WAV":
+                    new_files = []
+                    for file in output_files:
+                        try:
+                            old_path = os.path.join(self.output_dir, file)
+                            base, _ = os.path.splitext(file)
+                            new_ext = f".{self.output_format.lower()}"
+                            new_filename = f"{base}{new_ext}"
+                            new_path = os.path.join(self.output_dir, new_filename)
                         
-                        self.post_log(i18n.tr("status_converting", file=file, format=self.output_format))
+                            self.post_log(i18n.tr("status_converting", file=file, format=self.output_format))
                         
-                        if self.output_format == "FLAC":
-                            cmd = ["ffmpeg", "-y", "-i", old_path, "-c:a", "flac", "-sample_fmt", "s16", new_path]
-                        else:
-                            cmd = ["ffmpeg", "-y", "-i", old_path, "-c:a", "libmp3lame", "-b:a", "320k", new_path]
+                            if self.output_format == "FLAC":
+                                cmd = ["ffmpeg", "-y", "-i", old_path, "-c:a", "flac", "-sample_fmt", "s16", new_path]
+                            else:
+                                cmd = ["ffmpeg", "-y", "-i", old_path, "-c:a", "libmp3lame", "-b:a", "320k", new_path]
                             
-                        result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                         
-                        if result.returncode == 0:
-                            if os.path.exists(old_path):
-                                os.remove(old_path)
-                            new_files.append(new_filename)
-                        else:
-                            self.post_log(f"FFmpeg conversion failed for {file}")
+                            if result.returncode == 0:
+                                if os.path.exists(old_path):
+                                    os.remove(old_path)
+                                new_files.append(new_filename)
+                            else:
+                                self.post_log(f"FFmpeg conversion failed for {file}")
+                                new_files.append(file)
+                        except Exception as ex:
+                            self.post_log(f"Error converting {file}: {ex}")
                             new_files.append(file)
-                    except Exception as ex:
-                        self.post_log(f"Error converting {file}: {ex}")
-                        new_files.append(file)
-                output_files = new_files
+                    output_files = new_files
             
             self.post_progress(100)
             self.post_log(i18n.tr("status_complete", files=output_files))

@@ -44,5 +44,7 @@
     "preset_crowd_live": "Restauración de Vivo (Público + Voz + Base)",
     "preset_vocal_rvc": "Prep Vocal RVC (Lead Limpia + Reverb + Instrumental/BVs)",
     "ensemble_algorithm": "Algoritmo Ensemble:",
-    "ensemble_algorithm_tooltip": "Algoritmo para fusionar los resultados de los dos modelos"
+    "ensemble_algorithm_tooltip": "Algoritmo para fusionar los resultados de los dos modelos",
+    "chunk_enable": "Activar Segmentación (para archivos largos / prevención OOM)",
+    "chunk_duration_label": "Tamaño del Segmento:"
 }

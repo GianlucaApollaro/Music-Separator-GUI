@@ -19,12 +19,15 @@ source "$VENV_DIR/bin/activate"
 echo "• Installing/Upgrading PyInstaller..."
 pip install --upgrade pyinstaller
 
+echo "• Cleaning previous builds..."
+rm -rf build dist "Music separator.spec"
+
 echo ""
 echo "• Building macOS Application Bundle..."
 echo "This may take several minutes (Torch is large)..."
 
 # Note: on macOS, the delimiter for --add-data is ":" instead of ";"
-pyinstaller --noconsole --onedir --icon=NONE \
+pyinstaller --windowed \
     --hidden-import=torch \
     --hidden-import=torchvision \
     --hidden-import=torchaudio \

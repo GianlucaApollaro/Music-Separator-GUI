@@ -31,6 +31,7 @@ This project is a wrapper around several amazing open-source projects. Heartfelt
 - **Andrew Beveridge** ([beveradb](https://github.com/beveradb)): Author of [python-audio-separator](https://github.com/karaokenerds/python-audio-separator), the engine behind this GUI.
 - **Anjok07** & **aufr33**: Developers of the [Ultimate Vocal Remover GUI](https://github.com/Anjok07/ultimatevocalremovergui) and the incredible models (MDX-Net, VR Arch, etc.) that make this possible.
 - **Kuielab & Woosung Choi**: For the original MDX-Net AI code.
+- **Ivo De Palma**: A special thanks for his invaluable help in debugging and compiling the native macOS version of this application.
 - **All model contributors** mentioned in the UVR and audio-separator projects.
 
 ## License 📄

@@ -40,11 +40,14 @@
     "preset_vocal_split": "Vocal Split (Instrumental + Lead/Backing)",
     "preset_vocal_dereverb": "Vocal De-Reverb (Instrumental + DeReverberated/Reverb)",
     "preset_ultimate_stems": "Ultimate Stems (Becruily Vocal + 5 BS-Roformer Stems)",
+    "preset_ultimate_drums": "Ultimate Stems + Drum Split (7+ Stems)",
     "preset_chorus_hq": "Male/Female Voice Split (Instrumental + Male/Female)",
     "preset_crowd_live": "Live Restore (Crowd + Vocal + Inst)",
     "preset_vocal_rvc": "RVC Vocal Prep (Lead Clean + Reverb + Instrumental/BVs)",
+    "preset_guitar_specialist": "Guitar Extraction (3 Stems)",
     "ensemble_algorithm": "Ensemble Algorithm:",
     "ensemble_algorithm_tooltip": "Algorithm used to fuse the two models' outputs",
     "chunk_enable": "Enable Chunking (for long files / OOM prevention)",
-    "chunk_duration_label": "Chunk Size:"
+    "chunk_duration_label": "Chunk Size:",
+    "remove_leading_numbers": "Remove leading numbers from output folder"
 }

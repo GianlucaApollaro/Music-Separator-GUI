@@ -11,9 +11,9 @@ def format_time(seconds):
     m, s = divmod(seconds, 60)
     return f"{int(m):02d}:{int(s):02d}"
 
-def download_file(url, dest_path, progress_callback=None):
+def download_file(url, dest_path, progress_callback=None, overwrite=False):
     """Downloads a file from url to dest_path with optional progress callback."""
-    if os.path.exists(dest_path):
+    if os.path.exists(dest_path) and not overwrite:
         return True
         
     try:

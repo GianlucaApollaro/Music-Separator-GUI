@@ -38,9 +38,11 @@ Music separator Mac.zip
 Thumbs.db
 desktop.ini
 
-# Logs
+# Logs & User Configs
 Log.txt
 *.log
+[Ee]rror.txt
+config.json
 
 # Binaries
 ffmpeg_bin/
@@ -51,3 +53,7 @@ ffprobe_bin/
 *.zip
 Mac/
 refactor.py
+
+# Publishing scripts
+publish_*.bat
+release_notes_*.md

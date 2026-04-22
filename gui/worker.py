@@ -12,18 +12,6 @@ import tempfile
 import shutil
 import uuid
 
-# Custom event for updating the log in the UI
-EVT_LOG_ID = wx.NewIdRef()
-EVT_DONE_ID = wx.NewIdRef()
-EVT_PROGRESS_ID = wx.NewIdRef()
-
-class ProgressEvent(wx.PyEvent):
-    def __init__(self, value, maximum=100):
-        super().__init__()
-        self.SetEventType(EVT_PROGRESS_ID)
-        self.value = value
-        self.maximum = maximum
-
 class TqdmCaptureStream:
     def __init__(self, notify_func, original_stream):
         self.notify_func = notify_func
@@ -54,18 +42,7 @@ class TqdmCaptureStream:
             except Exception:
                 pass
 
-class LogEvent(wx.PyEvent):
-    def __init__(self, message):
-        super().__init__()
-        self.SetEventType(EVT_LOG_ID)
-        self.message = message
-
-class DoneEvent(wx.PyEvent):
-    def __init__(self, success, message):
-        super().__init__()
-        self.SetEventType(EVT_DONE_ID)
-        self.success = success
-        self.message = message
+from gui.events import EVT_LOG_ID, EVT_DONE_ID, EVT_PROGRESS_ID, ProgressEvent, LogEvent, DoneEvent
 
 class GuiLogHandler(logging.Handler):
     def __init__(self, check_stop_func=None, notify_func=None):
@@ -110,6 +87,10 @@ class SeparationThread(threading.Thread):
                 import torch
                 self._old_is_available = torch.cuda.is_available
                 torch.cuda.is_available = lambda: False
+                # Also disable MPS on Apple Silicon
+                if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                    self._old_mps_is_available = torch.backends.mps.is_available
+                    torch.backends.mps.is_available = lambda: False
                 try:
                     import onnxruntime
                     self._old_get_providers = onnxruntime.get_available_providers
@@ -177,6 +158,44 @@ class SeparationThread(threading.Thread):
                     if "MDXC" not in models:
                         models["MDXC"] = {}
                     models["MDXC"].update(custom_mdxc)
+                    
+                    # Inject all models from parent's downloadable_models so they are natively supported
+                    if getattr(self, "parent", None) and hasattr(self.parent, "downloadable_models"):
+                        for friendly_name, file_info in self.parent.downloadable_models.items():
+                            model_type = "MDXC" # Default
+                            target_file = friendly_name
+                            
+                            for fname in file_info.keys():
+                                if fname.endswith('.onnx'):
+                                    model_type = "MDX"
+                                    target_file = fname
+                                    break
+                                elif fname.endswith('.pth'):
+                                    model_type = "VR"
+                                    target_file = fname
+                                    break
+                                elif any(fname.endswith(ext) for ext in ['.ckpt', '.th']):
+                                    target_file = fname
+                                    if fname.endswith('.th') or ('demucs' in friendly_name.lower()):
+                                        model_type = "Demucs"
+                                    else:
+                                        model_type = "MDXC"
+                                    break
+                            
+                            if model_type == "Demucs":
+                                for fname in file_info.keys():
+                                    if fname.endswith('.yaml'):
+                                        target_file = fname
+                                        break
+                                        
+                            if model_type not in models:
+                                models[model_type] = {}
+                                
+                            models[model_type][friendly_name] = {
+                                "filename": target_file,
+                                "download_files": list(file_info.keys())
+                            }
+                            
                     return models
                 
                 # Apply patch to the instance
@@ -367,31 +386,11 @@ class SeparationThread(threading.Thread):
                         # ====== PRESET ENSEMBLE (2-Pass + Local Mixing) ======
                         import soundfile as sf
                         import numpy as np
+                        from gui.audio_utils import blend_audio, stem_from_filename
 
                         algorithm = self.preset_config.get("algorithm", "avg_wave")
                         temp_dir_1 = tempfile.mkdtemp(dir=self.output_dir, prefix="ens_1_")
                         temp_dir_2 = tempfile.mkdtemp(dir=self.output_dir, prefix="ens_2_")
-
-                        def get_stem_clean_ens(filename):
-                            basename = os.path.basename(filename)
-                            base = os.path.splitext(basename)[0]
-                            matches = re.findall(r"_\(([^)]+)\)", base)
-                            if matches:
-                                s = matches[-1].lower()
-                            else:
-                                parts = base.split("_")
-                                s = parts[-1].lower().strip("()") if parts else base.lower()
-                            return "instrumental" if s == "other" else s
-
-                        def blend(a, b, algo):
-                            if algo == "min_wave":
-                                return np.minimum(a, b)
-                            elif algo == "max_wave":
-                                return np.maximum(a, b)
-                            elif algo == "median_wave":
-                                return np.median(np.stack([a, b]), axis=0)
-                            else:  # avg_wave (default)
-                                return (a + b) / 2.0
 
                         # Pass 1
                         self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 1: {self.preset_config['model_1']})")
@@ -420,14 +419,14 @@ class SeparationThread(threading.Thread):
                         self.post_log(i18n.tr("status_ensemble_mixing") + f" [{algorithm}]")
                         final_outputs = []
                         for f1 in output_files_1:
-                            stem1 = get_stem_clean_ens(f1)
-                            match_2 = [f for f in output_files_2 if get_stem_clean_ens(f) == stem1]
+                            stem1 = stem_from_filename(f1)
+                            match_2 = [f for f in output_files_2 if stem_from_filename(f) == stem1]
                             clean_ext = os.path.splitext(f1)[1]
                             if match_2:
                                 d1, sr1 = sf.read(os.path.join(temp_dir_1, f1))
                                 d2, _ = sf.read(os.path.join(temp_dir_2, match_2[0]))
                                 min_len = min(len(d1), len(d2))
-                                mixed = blend(d1[:min_len], d2[:min_len], algorithm)
+                                mixed = blend_audio(d1[:min_len], d2[:min_len], algorithm)
                                 out_name = f"(Ensemble_{stem1.capitalize()}){clean_ext}"
                                 sf.write(os.path.join(file_output_dir, out_name), mixed, sr1)
                                 final_outputs.append(out_name)
@@ -448,17 +447,7 @@ class SeparationThread(threading.Thread):
                         temp_dir_1 = tempfile.mkdtemp(dir=self.output_dir, prefix="chain_1_")
                         temp_dir_2 = tempfile.mkdtemp(dir=self.output_dir, prefix="chain_2_")
                         final_outputs = []
-                    
-                        def get_stem_clean(filename):
-                            basename = os.path.basename(filename)
-                            base = os.path.splitext(basename)[0]
-                            matches = re.findall(r"_\(([^)]+)\)", base)
-                            if matches:
-                                stem = matches[-1].lower()
-                            else:
-                                parts = base.split("_")
-                                stem = parts[-1].lower().strip("()") if parts else base.lower()
-                            return stem
+                        from gui.audio_utils import stem_from_filename
                     
                         # Model 1
                         self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 1: {self.preset_config['model_1']})")
@@ -476,7 +465,7 @@ class SeparationThread(threading.Thread):
                         pass_stem = self.preset_config["pass_stem"].lower()
                     
                         for f1 in output_files_1:
-                            stem1 = get_stem_clean(f1)
+                            stem1 = stem_from_filename(f1)
                             clean_ext = os.path.splitext(f1)[1]
                         
                             # Tratta 'other' e 'instrumental' come sinonimi per la decisione di quale stelo passare al M2
@@ -515,7 +504,7 @@ class SeparationThread(threading.Thread):
                             pass_stem_2 = self.preset_config.get("pass_stem_2", "").lower()
                         
                             for f2 in output_files_2:
-                                stem2 = get_stem_clean(f2)
+                                stem2 = stem_from_filename(f2)
                                 clean_ext = os.path.splitext(f2)[1]
                             
                                 # Check if this stem should be passed to model 3
@@ -559,7 +548,7 @@ class SeparationThread(threading.Thread):
                                     sys.stderr = old_stderr
                                 
                                 for f3 in output_files_3:
-                                    stem3 = get_stem_clean(f3)
+                                    stem3 = stem_from_filename(f3)
                                     clean_ext = os.path.splitext(f3)[1]
                                     
                                     rename_map_3 = self.preset_config.get("m3_rename_map", {})
@@ -741,8 +730,22 @@ class SeparationThread(threading.Thread):
 
         except Exception as e:
             error_msg = str(e)
-            self.post_log(i18n.tr("status_error", error=error_msg))
-            wx.PostEvent(self.parent, DoneEvent(False, error_msg))
+            # Detect Apple Silicon MPS out-of-memory error and show a clear message
+            if "MPS backend out of memory" in error_msg or "MPS allocated" in error_msg:
+                friendly = (
+                    "⚠️ Out of Memory (Apple Silicon MPS)\n\n"
+                    "The model requires more memory than available on the GPU.\n"
+                    "Suggestions:\n"
+                    "  • Try a smaller/lighter model\n"
+                    "  • Enable the 'CPU only' option to avoid GPU memory limits\n"
+                    "  • Close other apps to free RAM\n\n"
+                    f"Technical detail: {error_msg}"
+                )
+                self.post_log(friendly)
+                wx.PostEvent(self.parent, DoneEvent(False, friendly))
+            else:
+                self.post_log(i18n.tr("status_error", error=error_msg))
+                wx.PostEvent(self.parent, DoneEvent(False, error_msg))
             
         finally:
             # Always cleanly restore the patched variables for subsequent GPU runs
@@ -756,6 +759,8 @@ class SeparationThread(threading.Thread):
                     import torch
                     if hasattr(self, '_old_is_available'):
                         torch.cuda.is_available = self._old_is_available
+                    if hasattr(self, '_old_mps_is_available'):
+                        torch.backends.mps.is_available = self._old_mps_is_available
                 except ImportError:
                     pass
                 

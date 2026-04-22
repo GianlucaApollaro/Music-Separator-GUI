@@ -1,33 +1,38 @@
 #!/bin/bash
-cd "$(dirname "$0")"
+set -euo pipefail
+cd "$(dirname "$0")" || exit 1
 
 VENV_DIR="venv_mac"
+APP_NAME="Music separator"
+APP_PATH="dist/${APP_NAME}.app"
+EXECUTABLE_PATH="$APP_PATH/Contents/MacOS/${APP_NAME}"
 
-echo "==================================================="
-echo "   Music Separator - macOS Build Script (.app)     "
-echo "==================================================="
+printf '%s\n' "==================================================="
+printf '%s\n' "   Music Separator - macOS Build Script (.app)     "
+printf '%s\n' "==================================================="
 
 if [ ! -d "$VENV_DIR" ]; then
-    echo "Virtual environment not found! Please run install_mac.command first."
-    echo "Press any key to exit..."
+    printf '%s\n' "Virtual environment not found! Please run install_mac.command first."
+    printf '%s\n' "Press any key to exit..."
     read -n 1 -s
     exit 1
 fi
 
 source "$VENV_DIR/bin/activate"
 
-echo "• Installing/Upgrading PyInstaller..."
-pip install --upgrade pyinstaller
+printf '%s\n' "• Installing/Upgrading PyInstaller..."
+python -m pip install --upgrade pyinstaller
 
-echo "• Cleaning previous builds..."
-rm -rf build dist "Music separator.spec"
+printf '%s\n' "• Cleaning previous builds..."
+rm -rf build dist "${APP_NAME}.spec"
 
-echo ""
-echo "• Building macOS Application Bundle..."
-echo "This may take several minutes (Torch is large)..."
+printf '\n'
+printf '%s\n' "• Building macOS Application Bundle..."
+printf '%s\n' "This may take several minutes (Torch is large)..."
 
-# Note: on macOS, the delimiter for --add-data is ":" instead of ";"
 pyinstaller --windowed \
+    --target-arch arm64 \
+    --osx-bundle-identifier "it.gianluca.musicseparator" \
     --hidden-import=torch \
     --hidden-import=torchvision \
     --hidden-import=torchaudio \
@@ -43,16 +48,19 @@ pyinstaller --windowed \
     --collect-all audio_separator \
     --add-data "i18n:i18n" \
     --add-data "gui:gui" \
-    --name "Music separator" \
+    --name "$APP_NAME" \
     main.py
 
-echo ""
-echo "==================================================="
-echo "   Build complete! Check the 'dist' folder.        "
-echo "==================================================="
-echo ""
-echo "You will find 'Music separator.app' in the dist folder."
-echo "You can move it to your Applications folder."
-echo ""
-echo "Press any key to close..."
+if [ -f "$EXECUTABLE_PATH" ]; then
+    chmod +x "$EXECUTABLE_PATH"
+fi
+
+printf '\n'
+printf '%s\n' "==================================================="
+printf '%s\n' "   Build complete! Check the 'dist' folder.        "
+printf '%s\n' "==================================================="
+printf '\n'
+printf '%s\n' "You will find 'Music separator.app' in the dist folder."
+printf '%s\n' "You can move it to your Applications folder."
+printf '%s\n' "Press any key to close..."
 read -n 1 -s

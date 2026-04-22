@@ -54,10 +54,15 @@ class TranslationManager:
             print(f"Error loading translation file: {e}")
             self.translations = {}
 
-    def tr(self, key, **kwargs):
-        """Returns the translation for the key, formatted with kwargs if provided."""
+    def tr(self, key: str, **kwargs) -> str:
+        """Returns the translation for the key, formatted with kwargs if provided, handling plurals if 'count' is present."""
         text = self.translations.get(key, key)
         if kwargs:
+            if 'count' in kwargs:
+                count = kwargs['count']
+                plural_key = f"{key}_plural"
+                if plural_key in self.translations:
+                    text = self.translations[plural_key] if count != 1 else text
             try:
                 return text.format(**kwargs)
             except KeyError:

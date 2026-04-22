@@ -44,6 +44,9 @@ if os.name == 'nt':
             super().__init__(*args, **kwargs)
     subprocess.Popen = NoWindowPopen
 
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
 import wx
 from gui.main_window import MainWindow
 

@@ -49,5 +49,9 @@
     "ensemble_algorithm_tooltip": "Algoritmo para fusionar los resultados de los dos modelos",
     "chunk_enable": "Activar Segmentación (para archivos largos / prevención OOM)",
     "chunk_duration_label": "Tamaño del Segmento:",
-    "remove_leading_numbers": "Eliminar números al principio de la carpeta de salida"
+    "remove_leading_numbers": "Eliminar números al principio de la carpeta de salida",
+    "browse_folder": "Elegir Carpeta",
+    "choose_input_dir": "Elige la carpeta de entrada",
+    "no_audio_files_found": "No se encontraron archivos de audio en la carpeta seleccionada.",
+    "msg_no_files": "Sin archivos"
 }

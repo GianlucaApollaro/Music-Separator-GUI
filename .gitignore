@@ -17,6 +17,7 @@ models/*.th
 models/*.pth
 models/*.pth.tar
 models/*.yaml
+models/*.safetensors
 # But we want to keep the metadata files
 !models/download_checks.json
 !models/mdx_model_data.json

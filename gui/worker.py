@@ -307,8 +307,33 @@ class SeparationThread(threading.Thread):
 
                 _original_torch_load = torch.load
                 _original_serialization_load = torch.serialization.load
-                
+
+                def _is_safetensors_file(path_arg):
+                    """Detect safetensors format by magic bytes (first 8 bytes are a uint64 length prefix)."""
+                    try:
+                        if isinstance(path_arg, str) and os.path.isfile(path_arg):
+                            with open(path_arg, 'rb') as _f:
+                                header = _f.read(1)
+                            # safetensors files start with a uint64 little-endian length.
+                            # Pickle files start with 0x80 (128). safetensors first bytes
+                            # are never 0x80, and torch.load fails with 'invalid load key'.
+                            # Safest check: the file extension or the path ends with .safetensors
+                            return path_arg.endswith('.safetensors')
+                    except Exception:
+                        pass
+                    return False
+
+                def _load_safetensors(path_arg, device='cpu'):
+                    from safetensors.torch import load_file as _st_load
+                    dev = str(device) if not isinstance(device, str) else device
+                    return _st_load(path_arg, device=dev)
+
                 def _safe_torch_load(*args, **kwargs):
+                    # If the first argument looks like a safetensors path, redirect
+                    path_arg = args[0] if args else kwargs.get('f', None)
+                    if path_arg and _is_safetensors_file(path_arg):
+                        device = kwargs.get('map_location', 'cpu')
+                        return _load_safetensors(path_arg, device)
                     if 'weights_only' not in kwargs:
                         kwargs['weights_only'] = False
                     try:
@@ -319,6 +344,10 @@ class SeparationThread(threading.Thread):
                         return _original_torch_load(*args, **kwargs)
 
                 def _safe_serialization_load(*args, **kwargs):
+                    path_arg = args[0] if args else kwargs.get('f', None)
+                    if path_arg and _is_safetensors_file(path_arg):
+                        device = kwargs.get('map_location', 'cpu')
+                        return _load_safetensors(path_arg, device)
                     if 'weights_only' not in kwargs:
                         kwargs['weights_only'] = False
                     try:
@@ -327,7 +356,7 @@ class SeparationThread(threading.Thread):
                         if 'weights_only' in kwargs:
                             del kwargs['weights_only']
                         return _original_serialization_load(*args, **kwargs)
-                
+
                 torch.load = _safe_torch_load
                 torch.serialization.load = _safe_serialization_load
 

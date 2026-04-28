@@ -47,6 +47,7 @@ config.json
 # Binaries
 ffmpeg_bin/
 ffprobe_bin/
+ffmpeg_Mac_bin/
 
 # Temporary and Release files
 *.7z

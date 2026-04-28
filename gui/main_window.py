@@ -339,6 +339,7 @@ class MainWindow(wx.Frame):
 
     def OnLanguageChange(self, lang_code):
         i18n.load_language(lang_code)
+        config.set("language", lang_code)
         self.UpdateLabels()
 
     def OnBrowseInput(self, event):

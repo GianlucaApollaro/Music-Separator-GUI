@@ -1,13 +1,59 @@
 import os
+import sys
+import platform
 import logging
 import requests
 from typing import Optional, Callable, Tuple
 
 logger = logging.getLogger(__name__)
 
+def get_base_path() -> str:
+    """Returns the base path for resources (i18n, ffmpeg, etc.)."""
+    if getattr(sys, 'frozen', False):
+        # If running as a bundle (PyInstaller)
+        return sys._MEIPASS
+    # If running as a script
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def get_app_data_dir() -> str:
+    """
+    Returns a writable directory for configurations and models.
+    Prioritizes the app's folder (portability) if writable, 
+    otherwise falls back to system Application Support/AppData.
+    """
+    if getattr(sys, 'frozen', False):
+        if sys.platform == 'darwin':
+            # On macOS bundle, sys.executable is inside the .app bundle
+            # We want the folder containing the .app for portability
+            app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(sys.executable))))
+        else:
+            app_dir = os.path.dirname(sys.executable)
+    else:
+        app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    # Try to see if we can write in the app directory (Portability mode)
+    try:
+        test_file = os.path.join(app_dir, '.write_test')
+        with open(test_file, 'w') as f:
+            f.write('test')
+        os.remove(test_file)
+        return app_dir
+    except (IOError, OSError, PermissionError):
+        # Fallback to system-specific app data directory
+        home = os.path.expanduser("~")
+        if sys.platform == 'darwin':
+            data_dir = os.path.join(home, 'Library', 'Application Support', 'MusicSeparator')
+        elif sys.platform == 'win32':
+            data_dir = os.path.join(os.environ.get('APPDATA', home), 'MusicSeparator')
+        else:
+            data_dir = os.path.join(home, '.music_separator')
+        
+        os.makedirs(data_dir, exist_ok=True)
+        return data_dir
+
 def get_writable_dir() -> str:
-    """Returns a writable directory for logs or configs."""
-    return os.getcwd()
+    """Legacy wrapper for get_app_data_dir."""
+    return get_app_data_dir()
 
 def format_time(seconds: float) -> str:
     """Formats seconds into MM:SS."""

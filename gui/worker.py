@@ -222,9 +222,30 @@ class SeparationThread(threading.Thread):
                                 "download_files": list(file_info.keys())
                             }
                             
-                            if model_type == "MDXC" and "roformer" in friendly_name.lower():
+                            if model_type == "MDXC" and ("roformer" in friendly_name.lower() or "roformer" in target_file.lower()):
                                 models[model_type][friendly_name]["is_roformer"] = True
                             
+                    # Inject models from downloadable_models_by_file (ensures newly added pcunwa models are found)
+                    if getattr(self, "parent", None) and hasattr(self.parent, "model_manager"):
+                        mm = self.parent.model_manager
+                        for filename, file_info in mm.downloadable_models_by_file.items():
+                            model_type = "MDXC"
+                            if filename.endswith('.onnx'): model_type = "MDX"
+                            elif filename.endswith('.pth'): model_type = "VR"
+                            elif filename.endswith('.th') or 'demucs' in filename.lower(): model_type = "Demucs"
+
+                            if model_type not in models: models[model_type] = {}
+                            
+                            # Avoid duplicates
+                            if any(m.get("filename") == filename for m in models[model_type].values()):
+                                continue
+                                
+                            models[model_type][filename] = {
+                                "filename": filename,
+                                "download_files": list(file_info.keys())
+                            }
+                            if model_type == "MDXC" and "roformer" in filename.lower():
+                                models[model_type][filename]["is_roformer"] = True
                     return models
                 
                 # Apply patch to the instance
@@ -258,7 +279,52 @@ class SeparationThread(threading.Thread):
                     'mel_band_roformer_becruily_deux.ckpt':            'config_deux_becruily.yaml',
                     'mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144.ckpt': 
                                             'mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144_config.yaml',
+                    # FNO (Fourier Neural Operator) model
+                    'bs_roformer_fno.ckpt':                            'bs_roformer_fno.yaml',
+                    # Kim-Mel-Band Roformer fine-tuned variants (all share the same config)
+                    'kimmel_unwa_ft.ckpt':                             'config_kimmel_unwa_ft.yaml',
+                    'kimmel_unwa_ft2.ckpt':                            'config_kimmel_unwa_ft.yaml',
+                    'kimmel_unwa_ft2_bleedless.ckpt':                  'config_kimmel_unwa_ft.yaml',
+                    'kimmel_unwa_ft3_prev.ckpt':                       'config_kimmel_unwa_ft.yaml',
                 }
+
+                # --- PYTORCH 2.6+ WEIGHTS_ONLY FIX (Hardened) ---
+                import torch
+                import torch.serialization
+                
+                # Allowlist common Roformer globals globally
+                try:
+                    # GELU is often the culprit in UVR models
+                    if hasattr(torch.serialization, 'add_safe_globals'):
+                        torch.serialization.add_safe_globals([torch._C._nn.gelu, torch.nn.GELU])
+                except Exception:
+                    pass
+
+                _original_torch_load = torch.load
+                _original_serialization_load = torch.serialization.load
+                
+                def _safe_torch_load(*args, **kwargs):
+                    if 'weights_only' not in kwargs:
+                        kwargs['weights_only'] = False
+                    try:
+                        return _original_torch_load(*args, **kwargs)
+                    except TypeError:
+                        if 'weights_only' in kwargs:
+                            del kwargs['weights_only']
+                        return _original_torch_load(*args, **kwargs)
+
+                def _safe_serialization_load(*args, **kwargs):
+                    if 'weights_only' not in kwargs:
+                        kwargs['weights_only'] = False
+                    try:
+                        return _original_serialization_load(*args, **kwargs)
+                    except TypeError:
+                        if 'weights_only' in kwargs:
+                            del kwargs['weights_only']
+                        return _original_serialization_load(*args, **kwargs)
+                
+                torch.load = _safe_torch_load
+                torch.serialization.load = _safe_serialization_load
 
                 def patched_load_model(self_loader, model_path, config, device='cpu'):
                     import torch, logging as _logging
@@ -267,6 +333,17 @@ class SeparationThread(threading.Thread):
                     ckpt_filename = os.path.basename(model_path)
                     yaml_filename = custom_ckpt_to_yaml.get(ckpt_filename)
 
+                    if not yaml_filename:
+                        # Try to find it in ModelManager's registries (closure access to self.parent)
+                        if getattr(self, "parent", None) and hasattr(self.parent, "model_manager"):
+                            mm = self.parent.model_manager
+                            info = mm.downloadable_models_by_file.get(ckpt_filename)
+                            if info:
+                                for f in info.keys():
+                                    if f.endswith('.yaml'):
+                                        yaml_filename = f
+                                        break
+                    
                     if yaml_filename:
                         yaml_path = os.path.join(model_dir_for_patch, yaml_filename)
                         if os.path.exists(yaml_path):
@@ -279,61 +356,150 @@ class SeparationThread(threading.Thread):
                                     f"[Patch] Direct YAML read for {ckpt_filename}: "
                                     f"dim={model_section.get('dim')}, "
                                     f"depth={model_section.get('depth')}, "
-                                    f"num_bands={model_section.get('num_bands')}"
+                                    f"num_bands={model_section.get('num_bands', model_section.get('num_subbands'))}"
                                 )
 
-                                # Determine model type
-                                if 'num_bands' in model_section:
-                                    model_args = {
-                                        'dim': model_section['dim'],
-                                        'depth': model_section['depth'],
-                                        'stereo': model_section.get('stereo', False),
-                                        'num_stems': model_section.get('num_stems', 2),
-                                        'time_transformer_depth': model_section.get('time_transformer_depth', 2),
-                                        'freq_transformer_depth': model_section.get('freq_transformer_depth', 2),
-                                        'num_bands': model_section['num_bands'],
-                                        'dim_head': model_section.get('dim_head', 64),
-                                        'heads': model_section.get('heads', 8),
-                                        'attn_dropout': model_section.get('attn_dropout', 0.0),
-                                        'ff_dropout': model_section.get('ff_dropout', 0.0),
-                                        'flash_attn': model_section.get('flash_attn', True),
-                                        'mlp_expansion_factor': model_section.get('mlp_expansion_factor', 4),
-                                        'sage_attention': model_section.get('sage_attention', False),
-                                        'zero_dc': model_section.get('zero_dc', True),
-                                        'use_torch_checkpoint': model_section.get('use_torch_checkpoint', False),
-                                        'skip_connection': model_section.get('skip_connection', False),
-                                    }
-                                    if 'sample_rate' in model_section:
-                                        model_args['sample_rate'] = model_section['sample_rate']
-                                    for opt_key in [
-                                        'mask_estimator_depth', 'stft_n_fft', 'stft_hop_length',
-                                        'stft_win_length', 'stft_normalized',
-                                        'multi_stft_resolution_loss_weight',
-                                        'multi_stft_resolutions_window_sizes',
-                                        'multi_stft_hop_size', 'multi_stft_normalized',
-                                        'match_input_audio_length',
-                                    ]:
-                                        if opt_key in model_section:
-                                            model_args[opt_key] = model_section[opt_key]
+                                # Determine model type and prepare specific args
+                                is_bs = 'freqs_per_bands' in model_section
+                                
+                                # Base arguments common to both
+                                model_args = {
+                                    'dim': model_section['dim'],
+                                    'depth': model_section['depth'],
+                                    'stereo': model_section.get('stereo', False),
+                                    'num_stems': model_section.get('num_stems', 2),
+                                    'time_transformer_depth': model_section.get('time_transformer_depth', 2),
+                                    'freq_transformer_depth': model_section.get('freq_transformer_depth', 2),
+                                    'dim_head': model_section.get('dim_head', 64),
+                                    'heads': model_section.get('heads', 8),
+                                    'attn_dropout': model_section.get('attn_dropout', 0.0),
+                                    'ff_dropout': model_section.get('ff_dropout', 0.0),
+                                    'flash_attn': model_section.get('flash_attn', True),
+                                    'mlp_expansion_factor': model_section.get('mlp_expansion_factor', 4),
+                                }
+                                
+                                # Add optional STFT/Loss params if present
+                                for opt_key in [
+                                    'mask_estimator_depth', 'stft_n_fft', 'stft_hop_length',
+                                    'stft_win_length', 'stft_normalized', 'sample_rate',
+                                    'multi_stft_resolution_loss_weight', 'multi_stft_resolutions_window_sizes',
+                                    'multi_stft_hop_size', 'multi_stft_normalized', 'match_input_audio_length',
+                                    'sage_attention', 'zero_dc', 'use_torch_checkpoint', 'skip_connection'
+                                ]:
+                                    if opt_key in model_section:
+                                        model_args[opt_key] = model_section[opt_key]
 
+                                if is_bs:
+                                    from audio_separator.separator.uvr_lib_v5.roformer.bs_roformer import BSRoformer
+                                    model_args['freqs_per_bands'] = tuple(model_section['freqs_per_bands'])
+                                    model = BSRoformer(**model_args)
+                                else:
+                                    model_args['num_bands'] = model_section.get('num_bands', model_section.get('num_subbands', 60))
                                     model = MelBandRoformer(**model_args)
-                                    if os.path.exists(model_path):
-                                        state_dict = torch.load(model_path, map_location=device)
-                                        if isinstance(state_dict, dict) and 'state_dict' in state_dict:
-                                            model.load_state_dict(state_dict['state_dict'])
-                                        elif isinstance(state_dict, dict) and 'model' in state_dict:
-                                            model.load_state_dict(state_dict['model'])
-                                        else:
-                                            model.load_state_dict(state_dict)
-                                    model.to(device).eval()
 
-                                    from audio_separator.separator.roformer.model_loading_result import ModelLoadingResult, ImplementationVersion
-                                    result = ModelLoadingResult.success_result(
-                                        model=model,
-                                        implementation=ImplementationVersion.NEW,
-                                        config=model_section,
-                                    )
-                                    return result
+                                if os.path.exists(model_path):
+                                    # Use weights_only=False to allow loading GELU and other common Roformer globals
+                                    try:
+                                        state_dict = torch.load(model_path, map_location=device, weights_only=False)
+                                    except TypeError:
+                                        state_dict = torch.load(model_path, map_location=device)
+                                        
+                                    sd = state_dict.get('state_dict', state_dict.get('model', state_dict))
+                                    
+                                    # Detect custom architecture from weight key signatures
+                                    has_segm = any(".segm." in k for k in sd.keys())
+                                    has_fno  = any("fno_blocks" in k for k in sd.keys())
+                                    
+                                    if has_segm:
+                                        _log.info(f"[Patch] HyperACE/Segm architecture detected for {ckpt_filename}. Remapping weights.")
+                                        new_sd = {}
+                                        for k, v in sd.items():
+                                            new_k = k.replace(".segm.hyperace.", ".").replace(".segm.", ".")
+                                            new_sd[new_k] = v
+                                        model.load_state_dict(new_sd, strict=False)
+
+                                    elif has_fno:
+                                        _log.info(f"[Patch] FNO architecture detected for {ckpt_filename}. Rebuilding MaskEstimator with FNO1d.")
+                                        # Replace MaskEstimator with the FNO version matching pcunwa's training code exactly:
+                                        # https://huggingface.co/pcunwa/BS-Roformer-Inst-FNO
+                                        try:
+                                            from neuralop.models import FNO1d
+                                            from torch import nn as _nn
+                                            from torch.nn import Module as _Module, ModuleList as _ModuleList
+                                            from einops import rearrange as _rearrange
+
+                                            class FNOMaskEstimator(_Module):
+                                                def __init__(self, dim, dim_inputs, depth, mlp_expansion_factor=4):
+                                                    super().__init__()
+                                                    self.dim_inputs = dim_inputs
+                                                    self.to_freqs = _ModuleList([])
+                                                    for dim_in in dim_inputs:
+                                                        mlp = _nn.Sequential(
+                                                            FNO1d(
+                                                                n_modes_height=64,
+                                                                hidden_channels=dim,
+                                                                in_channels=dim,
+                                                                out_channels=dim_in * 2,
+                                                                lifting_channels=dim,
+                                                                projection_channels=dim,
+                                                                n_layers=3,
+                                                                separable=True,
+                                                            ),
+                                                            _nn.GLU(dim=-2),
+                                                        )
+                                                        self.to_freqs.append(mlp)
+
+                                                def forward(self, x):
+                                                    x = x.unbind(dim=-2)
+                                                    outs = []
+                                                    for band_features, mlp in zip(x, self.to_freqs):
+                                                        band_features = _rearrange(band_features, 'b t c -> b c t')
+                                                        with torch.autocast(device_type='cuda', enabled=False, dtype=torch.float32):
+                                                            freq_out = mlp(band_features).float()
+                                                        freq_out = _rearrange(freq_out, 'b c t -> b t c')
+                                                        outs.append(freq_out)
+                                                    return torch.cat(outs, dim=-1)
+
+                                            # Compute the per-band frequency dims (same formula as BSRoformer)
+                                            audio_channels = 2 if model_section.get('stereo', False) else 1
+                                            freqs_per_bands_with_complex = tuple(
+                                                2 * f * audio_channels
+                                                for f in model_section['freqs_per_bands']
+                                            )
+                                            # Rebuild mask_estimators on the already-constructed BSRoformer
+                                            model.mask_estimators = _nn.ModuleList([
+                                                FNOMaskEstimator(
+                                                    dim=model_section['dim'],
+                                                    dim_inputs=freqs_per_bands_with_complex,
+                                                    depth=model_section.get('mask_estimator_depth', 2),
+                                                    mlp_expansion_factor=model_section.get('mlp_expansion_factor', 4),
+                                                )
+                                                for _ in range(model_section.get('num_stems', 1))
+                                            ])
+                                            model.load_state_dict(sd, strict=True)
+                                            _log.info(f"[Patch] FNO MaskEstimator loaded successfully for {ckpt_filename}.")
+                                        except Exception as fno_err:
+                                            _log.warning(f"[Patch] FNO rebuild failed ({fno_err}), falling back to strict=False.")
+                                            model.load_state_dict(sd, strict=False)
+
+                                    else:
+                                        # Standard model — strict load with graceful retry
+                                        try:
+                                            model.load_state_dict(sd, strict=True)
+                                        except RuntimeError as strict_err:
+                                            _log.warning(f"[Patch] Strict load failed for {ckpt_filename}, retrying with strict=False: {strict_err}")
+                                            model.load_state_dict(sd, strict=False)
+                                    
+                                model.to(device).eval()
+
+
+                                from audio_separator.separator.roformer.model_loading_result import ModelLoadingResult, ImplementationVersion
+                                result = ModelLoadingResult.success_result(
+                                    model=model,
+                                    implementation=ImplementationVersion.NEW,
+                                    config=model_section,
+                                )
+                                return result
                             except Exception as direct_err:
                                 _log.warning(f"[Patch] Direct YAML load failed for {ckpt_filename}: {direct_err}. Falling back.")
 
@@ -805,6 +971,16 @@ class SeparationThread(threading.Thread):
                         onnxruntime.get_available_providers = self._old_get_providers
                 except ImportError:
                     pass
+            
+            # Restore original torch loading functions
+            try:
+                import torch, torch.serialization
+                if '_original_torch_load' in locals():
+                    torch.load = _original_torch_load
+                if '_original_serialization_load' in locals():
+                    torch.serialization.load = _original_serialization_load
+            except ImportError:
+                pass
 
     def post_progress(self, value, maximum=100):
         wx.PostEvent(self.parent, ProgressEvent(value, maximum))

@@ -1,15 +1,19 @@
 import os
 import json
 
+from gui.utils import get_app_data_dir
+
 class ConfigManager:
     def __init__(self, config_file="config.json"):
-        self.config_file = os.path.join(os.getcwd(), config_file)
+        self.data_dir = get_app_data_dir()
+        self.config_file = os.path.join(self.data_dir, config_file)
         self.config = {
-            "output_dir": os.path.join(os.getcwd(), 'output'),
+            "output_dir": os.path.join(self.data_dir, 'output'),
             "model_1": "BS-Roformer-SW.ckpt",
             "model_2": "UVR-MDX-NET-Inst_HQ_5.onnx",
             "preset": 0,
-            "enable_ensemble": False
+            "enable_ensemble": False,
+            "language": None
         }
         self.load()
 

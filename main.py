@@ -14,14 +14,8 @@ if sys.stdout is None or sys.stderr is None:
     if sys.stderr is None:
         sys.stderr = devnull
 
-# Inject bundled ffmpeg_bin into system PATH so libraries can find it
-import sys
-if getattr(sys, 'frozen', False):
-    # If running as PyInstaller bundle
-    base_dir = sys._MEIPASS
-else:
-    # If running as normal Python script
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+from gui.utils import get_base_path
+base_dir = get_base_path()
 
 # Determine bundled ffmpeg directory based on platform
 ffmpeg_bundled_dir = 'ffmpeg_Mac_bin' if sys.platform == 'darwin' else 'ffmpeg_bin'

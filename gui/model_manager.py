@@ -3,14 +3,14 @@ import json
 import threading
 import logging
 from typing import Dict, Optional, List, Callable
-from gui.utils import download_file
+from gui.utils import download_file, get_app_data_dir
 import wx
 
 logger = logging.getLogger(__name__)
 
 class ModelManager:
     def __init__(self, models_dir: str = None):
-        self.models_dir = models_dir or os.path.join(os.getcwd(), 'models')
+        self.models_dir = models_dir or os.path.join(get_app_data_dir(), 'models')
         os.makedirs(self.models_dir, exist_ok=True)
 
         self.downloadable_models: Dict[str, Dict[str, str]] = {}
@@ -69,6 +69,24 @@ class ModelManager:
                 "Inst_Fv8.ckpt",
                 "Lead_VocalDereverb.ckpt",
                 "last_bs_roformer.ckpt"
+            ],
+            "Unwa Custom Models (High Quality)": [
+                "bs_large_v2_inst.ckpt",
+                "bs_roformer_inst_hyperacev2.ckpt",
+                "bs_roformer_voc_hyperacev2.ckpt",
+                "BS-Roformer-Resurrection.ckpt",
+                "BS-Roformer-Resurrection-Inst.ckpt",
+                "big_beta7.ckpt",
+                "bs_roformer_revive.ckpt",
+                "bs_roformer_revive2.ckpt",
+                "bs_roformer_revive3e.ckpt",
+                "melband_roformer_instvoc_duality_v1.ckpt",
+                "melband_roformer_instvox_duality_v2.ckpt",
+                "bs_roformer_fno.ckpt",
+                "kimmel_unwa_ft.ckpt",
+                "kimmel_unwa_ft2.ckpt",
+                "kimmel_unwa_ft2_bleedless.ckpt",
+                "kimmel_unwa_ft3_prev.ckpt"
             ]
         }
 
@@ -215,6 +233,78 @@ class ModelManager:
         self.downloadable_models["Roformer Model: Last BS Roformer | (by GaboxR67)"] = gabox_last_bs_info
         self.downloadable_models_by_file["last_bs_roformer.ckpt"] = gabox_last_bs_info
 
+        # pcunwa models
+        unwa_large_inst_info = {
+            "bs_large_v2_inst.ckpt": "https://huggingface.co/pcunwa/BS-Roformer-Large-Inst/resolve/main/bs_large_v2_inst.ckpt",
+            "bs_large_v2_inst.yaml": "https://huggingface.co/pcunwa/BS-Roformer-Large-Inst/resolve/main/config.yaml"
+        }
+        self.downloadable_models_by_file["bs_large_v2_inst.ckpt"] = unwa_large_inst_info
+
+        unwa_hyperace_inst_info = {
+            "bs_roformer_inst_hyperacev2.ckpt": "https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_inst/bs_roformer_inst_hyperacev2.ckpt",
+            "bs_roformer_inst_hyperacev2.yaml": "https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_inst/config.yaml"
+        }
+        self.downloadable_models_by_file["bs_roformer_inst_hyperacev2.ckpt"] = unwa_hyperace_inst_info
+
+        unwa_hyperace_voc_info = {
+            "bs_roformer_voc_hyperacev2.ckpt": "https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_voc/bs_roformer_voc_hyperacev2.ckpt",
+            "bs_roformer_voc_hyperacev2.yaml": "https://huggingface.co/pcunwa/BS-Roformer-HyperACE/resolve/main/v2_voc/config.yaml"
+        }
+        self.downloadable_models_by_file["bs_roformer_voc_hyperacev2.ckpt"] = unwa_hyperace_voc_info
+
+        unwa_resurrection_info = {
+            "BS-Roformer-Resurrection.ckpt": "https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection.ckpt",
+            "BS-Roformer-Resurrection.yaml": "https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection-Config.yaml"
+        }
+        self.downloadable_models_by_file["BS-Roformer-Resurrection.ckpt"] = unwa_resurrection_info
+
+        unwa_resurrection_inst_info = {
+            "BS-Roformer-Resurrection-Inst.ckpt": "https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection-Inst.ckpt",
+            "BS-Roformer-Resurrection-Inst.yaml": "https://huggingface.co/pcunwa/BS-Roformer-Resurrection/resolve/main/BS-Roformer-Resurrection-Inst-Config.yaml"
+        }
+        self.downloadable_models_by_file["BS-Roformer-Resurrection-Inst.ckpt"] = unwa_resurrection_inst_info
+
+        unwa_big_beta7_info = {
+            "big_beta7.ckpt": "https://huggingface.co/pcunwa/Mel-Band-Roformer-big/resolve/main/big_beta7.ckpt",
+            "big_beta7.yaml": "https://huggingface.co/pcunwa/Mel-Band-Roformer-big/resolve/main/big_beta7.yaml"
+        }
+        self.downloadable_models_by_file["big_beta7.ckpt"] = unwa_big_beta7_info
+
+        unwa_revive_info = {
+            "bs_roformer_revive.ckpt": "https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/bs_roformer_revive.ckpt",
+            "bs_roformer_revive2.ckpt": "https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/bs_roformer_revive2.ckpt",
+            "bs_roformer_revive3e.ckpt": "https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/bs_roformer_revive3e.ckpt",
+            "bs_roformer_revive.yaml": "https://huggingface.co/pcunwa/BS-Roformer-Revive/resolve/main/config.yaml"
+        }
+        self.downloadable_models_by_file["bs_roformer_revive.ckpt"] = unwa_revive_info
+        self.downloadable_models_by_file["bs_roformer_revive2.ckpt"] = unwa_revive_info
+        self.downloadable_models_by_file["bs_roformer_revive3e.ckpt"] = unwa_revive_info
+
+        unwa_duality_info = {
+            "melband_roformer_instvoc_duality_v1.ckpt": "https://huggingface.co/pcunwa/Mel-Band-Roformer-InstVoc-Duality/resolve/main/melband_roformer_instvoc_duality_v1.ckpt",
+            "melband_roformer_instvox_duality_v2.ckpt": "https://huggingface.co/pcunwa/Mel-Band-Roformer-InstVoc-Duality/resolve/main/melband_roformer_instvox_duality_v2.ckpt",
+            "melband_roformer_instvoc_duality.yaml": "https://huggingface.co/pcunwa/Mel-Band-Roformer-InstVoc-Duality/resolve/main/config_melbandroformer_instvoc_duality.yaml"
+        }
+        self.downloadable_models_by_file["melband_roformer_instvoc_duality_v1.ckpt"] = unwa_duality_info
+        self.downloadable_models_by_file["melband_roformer_instvox_duality_v2.ckpt"] = unwa_duality_info
+
+        unwa_fno_info = {
+            "bs_roformer_fno.ckpt": "https://huggingface.co/pcunwa/BS-Roformer-Inst-FNO/resolve/main/bs_roformer_fno.ckpt",
+            "bs_roformer_fno.yaml": "https://huggingface.co/pcunwa/BS-Roformer-Inst-FNO/resolve/main/bsrofo_fno.yaml"
+        }
+        self.downloadable_models_by_file["bs_roformer_fno.ckpt"] = unwa_fno_info
+
+        # All kimmel variants share the same config YAML (config_kimmel_unwa_ft.yaml)
+        _kimmel_yaml = "config_kimmel_unwa_ft.yaml"
+        _kimmel_yaml_url = "https://huggingface.co/pcunwa/Kim-Mel-Band-Roformer-FT/resolve/main/config_kimmel_unwa_ft.yaml"
+        _kimmel_base = "https://huggingface.co/pcunwa/Kim-Mel-Band-Roformer-FT/resolve/main/"
+        
+        for _fname in ["kimmel_unwa_ft.ckpt", "kimmel_unwa_ft2.ckpt", "kimmel_unwa_ft2_bleedless.ckpt", "kimmel_unwa_ft3_prev.ckpt"]:
+            self.downloadable_models_by_file[_fname] = {
+                _fname: _kimmel_base + _fname,
+                _kimmel_yaml: _kimmel_yaml_url,
+            }
+
     def get_model_list(self) -> List[str]:
         model_list = []
         for category, mods in self.models_dict.items():
@@ -260,7 +350,13 @@ class ModelManager:
         """Fixes common compatibility issues in custom YAML configs for python-audio-separator."""
         basename = os.path.basename(yaml_path)
         # Whitelist of models to patch
-        if basename not in ["inst_gaboxFlowersV10.yaml", "Inst_Fv8.yaml", "Lead_VocalDereverb.yaml", "last_bs_roformer.yaml"]:
+        unwa_yamls = [
+            "bs_large_v2_inst.yaml", "bs_roformer_inst_hyperacev2.yaml", "bs_roformer_voc_hyperacev2.yaml",
+            "BS-Roformer-Resurrection.yaml", "BS-Roformer-Resurrection-Inst.yaml", "big_beta7.yaml",
+            "bs_roformer_revive.yaml", "melband_roformer_instvoc_duality.yaml", "bs_roformer_fno.yaml",
+            "config_kimmel_unwa_ft.yaml"
+        ]
+        if basename not in ["inst_gaboxFlowersV10.yaml", "Inst_Fv8.yaml", "Lead_VocalDereverb.yaml", "last_bs_roformer.yaml"] + unwa_yamls:
             return
 
         try:
@@ -277,7 +373,8 @@ class ModelManager:
             # Explicitly declare model architecture so roformer_loader doesn't guess
             if "model_type:" not in content:
                 # If it's the last_bs_roformer, it's a BS Roformer, otherwise it's MelBand
-                mtype = "bs_roformer" if "last_bs_roformer" in basename else "mel_band_roformer"
+                is_bs = any(x in basename for x in ["last_bs_roformer", "bs_large", "hyperace", "Resurrection", "revive", "fno"])
+                mtype = "bs_roformer" if is_bs else "mel_band_roformer"
                 content = f"model_type: {mtype}\n" + content
                 changed = True
                 

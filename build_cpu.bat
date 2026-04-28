@@ -25,7 +25,8 @@ echo This should be much faster than the GPU build (Torch ~250MB)...
     --hidden-import=audio_separator --hidden-import=wx --hidden-import=onnxruntime ^
     --hidden-import=wx._core --hidden-import=wx._windows --hidden-import=wx.lib.agw ^
     --hidden-import=wx.lib.pubsub --hidden-import=wx.lib.scrolledpanel ^
-    --collect-all wx --collect-all audio_separator ^
+    --hidden-import=neuralop --hidden-import=neuralop.models --hidden-import=neuralop.models.fno ^
+    --collect-all wx --collect-all audio_separator --collect-all neuralop ^
     --add-data "i18n;i18n" --add-data "ffmpeg_bin;ffmpeg_bin" ^
     --name "Music separator CPU" ^
     main.py

@@ -2,4 +2,5 @@ wxpython
 audio-separator[gpu]
 requests
 packaging
+neuraloperator==1.0.2
 # Note: torch will be installed explicitly in install.bat to target nightly/cu128

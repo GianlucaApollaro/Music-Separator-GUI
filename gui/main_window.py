@@ -22,6 +22,9 @@ class MainWindow(wx.Frame):
         self.Centre()
         self.OnPresetChange(None)  # Applica lo stato del preset salvato all'avvio
         
+        self.Bind(wx.EVT_CLOSE, self.OnClose)
+        wx.CallAfter(self._check_ffmpeg)
+        
         # Bind Custom Events
         self.Connect(-1, -1, EVT_LOG_ID, self.OnLog)
         self.Connect(-1, -1, EVT_DONE_ID, self.OnDone)
@@ -34,22 +37,42 @@ class MainWindow(wx.Frame):
         old_val_2 = self.cb_model_2.GetValue()
         
         self.model_list = self.model_manager.get_model_list()
+        self.display_to_file = {}
+        self.file_to_display = {}
         
         self.cb_model.Clear()
         self.cb_model_2.Clear()
+        
+        display_names = []
         for m in self.model_list:
-            self.cb_model.Append(m)
-            self.cb_model_2.Append(m)
+            display_name = m
+            for ext in ['.ckpt', '.onnx', '.yaml', '.safetensors', '.th', '.pth']:
+                if display_name.lower().endswith(ext):
+                    display_name = display_name[:-len(ext)]
+                    break
             
-        if old_val_1 in self.model_list:
+            self.display_to_file[display_name] = m
+            self.file_to_display[m] = display_name
+            display_names.append(display_name)
+            self.cb_model.Append(display_name)
+            self.cb_model_2.Append(display_name)
+            
+        # Restore selection using display names
+        if old_val_1 in display_names:
             self.cb_model.SetValue(old_val_1)
+        elif old_val_1 in self.file_to_display:
+            self.cb_model.SetValue(self.file_to_display[old_val_1])
         else:
-            self.cb_model.SetValue(config.get("model_1", self.model_list[0]))
+            default_m1 = config.get("model_1", self.model_list[0] if self.model_list else "")
+            self.cb_model.SetValue(self.file_to_display.get(default_m1, default_m1))
             
-        if old_val_2 in self.model_list:
+        if old_val_2 in display_names:
             self.cb_model_2.SetValue(old_val_2)
+        elif old_val_2 in self.file_to_display:
+            self.cb_model_2.SetValue(self.file_to_display[old_val_2])
         else:
-            self.cb_model_2.SetValue(config.get("model_2", self.model_list[-1] if self.model_list else ""))
+            default_m2 = config.get("model_2", self.model_list[-1] if self.model_list else "")
+            self.cb_model_2.SetValue(self.file_to_display.get(default_m2, default_m2))
 
     def InitMenu(self):
         menubar = wx.MenuBar()
@@ -394,12 +417,18 @@ class MainWindow(wx.Frame):
     def OnStart(self, event):
         input_string = self.tc_input.GetValue()
         output_dir = self.tc_output.GetValue().strip().strip('"')
-        model_name = self.cb_model.GetValue()
+        
+        display_name_1 = self.cb_model.GetValue()
+        display_name_2 = self.cb_model_2.GetValue()
+        
+        # Map display names back to filenames
+        model_name = self.display_to_file.get(display_name_1, display_name_1)
+        model_name_2 = self.display_to_file.get(display_name_2, display_name_2)
 
-        # Save user configuration
+        # Save user configuration (store the filenames/display names as seen in UI)
         config.set("output_dir", output_dir)
-        config.set("model_1", model_name)
-        config.set("model_2", self.cb_model_2.GetValue())
+        config.set("model_1", display_name_1)
+        config.set("model_2", display_name_2)
         config.set("preset", self.cb_preset.GetSelection())
         config.set("enable_ensemble", self.chk_ensemble.GetValue())
         config.set("output_format", self.cb_format.GetValue())
@@ -518,3 +547,29 @@ class MainWindow(wx.Frame):
         if self.worker:
             self.worker.stop()
             self.tc_log.AppendText(i18n.tr("msg_stopping") + "\n")
+    def _check_ffmpeg(self):
+        import shutil
+        if not shutil.which('ffmpeg'):
+            dlg = wx.MessageDialog(
+                self,
+                i18n.tr("ffmpeg_not_found"),
+                i18n.tr("warning"),
+                wx.OK | wx.ICON_WARNING
+            )
+            dlg.ShowModal()
+
+    def OnClose(self, event):
+        if self.worker and self.worker.is_alive():
+            dlg = wx.MessageDialog(
+                self,
+                i18n.tr("confirm_exit_during_processing"),
+                i18n.tr("confirm"),
+                wx.YES_NO | wx.ICON_QUESTION
+            )
+            if dlg.ShowModal() == wx.ID_YES:
+                self.worker.stop()
+                event.Skip()
+            else:
+                event.Veto()
+        else:
+            event.Skip()

@@ -14,7 +14,7 @@ git status -s
 
 echo.
 echo Committing changes...
-git commit -m "Version 1.3 - The Quality of Life Update: Batch Processing, Persistent Settings, UI Responsiveness, and Mac MPS Fixes"
+git commit -m "Music Separator v1.3 - Stability & Portability Update: Enhanced Model Resolution, Multi-platform Path Management (macOS/Win), UI Cleanup (Extension-less models), and FNO/einops Audio Quality Patch"
 
 if errorlevel 1 (
     echo.

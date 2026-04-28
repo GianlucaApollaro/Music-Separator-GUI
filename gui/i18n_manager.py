@@ -35,20 +35,28 @@ class TranslationManager:
         if sys.platform != "darwin":
             return None
         try:
-            # Requires pyobjc-framework-Cocoa
-            from Foundation import NSLocale
-            langs = NSLocale.preferredLanguages()
-            if langs:
-                for lang in langs:
-                    normalized = self._normalize_lang(lang)
-                    if normalized:
-                        return normalized
+            # Native method without pyobjc - use 'defaults' command
+            import subprocess
+            result = subprocess.run(
+                ['defaults', 'read', '-g', 'AppleLocale'],
+                capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                return self._normalize_lang(result.stdout.strip())
         except Exception:
             pass
+        
+        # Fallback: common macOS environment variables
+        for var in ("LANG", "LC_MESSAGES"):
+            val = os.environ.get(var)
+            if val:
+                normalized = self._normalize_lang(val)
+                if normalized:
+                    return normalized
         return None
 
     def _get_system_lang(self):
-        # 1. Try macOS native API
+        # 1. Try macOS native detection
         mac_lang = self._get_macos_lang()
         if mac_lang:
             return mac_lang
@@ -63,13 +71,8 @@ class TranslationManager:
         # 3. Try standard locale module
         try:
             import locale
-            # getdefaultlocale is deprecated but more reliable on Windows for system defaults
-            sys_lang, _ = locale.getdefaultlocale()
-            normalized = self._normalize_lang(sys_lang)
-            if normalized:
-                return normalized
-            
-            # Fallback to getlocale
+            # Set locale to user default for accurate reading
+            locale.setlocale(locale.LC_ALL, '')
             sys_lang, _ = locale.getlocale()
             normalized = self._normalize_lang(sys_lang)
             if normalized:

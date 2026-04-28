@@ -60,5 +60,9 @@
     "msg_error_title": "Error",
     "model_tooltip": "Select a model or type a custom model filename (e.g. from download_checks.json)",
     "gpu_mps_tooltip": "GPU: Apple Silicon MPS. Deselect to use CPU only.",
-    "gpu_not_available_tooltip": "GPU is not available in this build."
-}
+    "gpu_not_available_tooltip": "GPU is not available in this build.",
+    "ffmpeg_not_found": "FFmpeg was not found on your system. Format conversion and some separation features may not work.",
+    "confirm_exit_during_processing": "A separation process is currently running. Are you sure you want to exit and stop the process?",
+    "warning": "Warning",
+    "confirm": "Confirm"
+}

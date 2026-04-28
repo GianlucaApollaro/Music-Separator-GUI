@@ -113,9 +113,11 @@ class SeparationThread(threading.Thread):
             if self.chunk_duration:
                 self.post_log(f"Chunking enabled: {self.chunk_duration}s per segment.")
 
+            from gui.utils import get_app_data_dir
+            model_dir = os.path.join(get_app_data_dir(), 'models')
             separator = Separator(
                 log_level=logging.INFO,
-                model_file_dir=os.path.join(os.getcwd(), 'models'),
+                model_file_dir=model_dir,
                 output_dir=self.output_dir,
                 chunk_duration=self.chunk_duration
             )
@@ -269,7 +271,7 @@ class SeparationThread(threading.Thread):
                 from audio_separator.separator.uvr_lib_v5.roformer.mel_band_roformer import MelBandRoformer
 
                 original_load_model = RoformerLoader.load_model
-                model_dir_for_patch = os.path.join(os.getcwd(), 'models')
+                model_dir_for_patch = model_dir
 
                 # Map from model filename to its corresponding .yaml filename
                 custom_ckpt_to_yaml = {
@@ -848,26 +850,7 @@ class SeparationThread(threading.Thread):
                     temp_dir_2 = tempfile.mkdtemp(dir=self.output_dir, prefix="ens_2_")
                     base_input_name = os.path.splitext(os.path.basename(current_input_file))[0]
 
-                    def get_stem_clean_m(filename):
-                        basename = os.path.basename(filename)
-                        base = os.path.splitext(basename)[0]
-                        matches = re.findall(r"_\(([^)]+)\)", base)
-                        if matches:
-                            s = matches[-1].lower()
-                        else:
-                            parts = base.split("_")
-                            s = parts[-1].lower().strip("()") if parts else base.lower()
-                        return "instrumental" if s == "other" else s
-
-                    def blend_m(a, b, algo):
-                        if algo == "min_wave":
-                            return np.minimum(a, b)
-                        elif algo == "max_wave":
-                            return np.maximum(a, b)
-                        elif algo == "median_wave":
-                            return np.median(np.stack([a, b]), axis=0)
-                        else:  # avg_wave (default)
-                            return (a + b) / 2.0
+                    from gui.audio_utils import stem_from_filename, blend_audio
 
                     # Pass 1
                     self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 1: {self.model_name})")
@@ -896,14 +879,15 @@ class SeparationThread(threading.Thread):
                     self.post_log(i18n.tr("status_ensemble_mixing") + f" [{algorithm}]")
                     final_outputs = []
                     for f1 in output_files_1:
-                        stem1 = get_stem_clean_m(f1)
-                        match_2 = [f for f in output_files_2 if get_stem_clean_m(f) == stem1]
+                        stem1 = stem_from_filename(f1)
+                        if stem1 == "other": stem1 = "instrumental" # Compatibility
+                        
+                        match_2 = [f for f in output_files_2 if stem_from_filename(f) in (stem1, "other" if stem1 == "instrumental" else None)]
                         clean_ext = os.path.splitext(f1)[1]
                         if match_2:
                             d1, sr1 = sf.read(os.path.join(temp_dir_1, f1))
                             d2, _ = sf.read(os.path.join(temp_dir_2, match_2[0]))
-                            min_len = min(len(d1), len(d2))
-                            mixed = blend_m(d1[:min_len], d2[:min_len], algorithm)
+                            mixed = blend_audio(d1, d2, algorithm)
                             out_name = f"(Ensemble_{stem1.capitalize()}){clean_ext}"
                             sf.write(os.path.join(file_output_dir, out_name), mixed, sr1)
                             final_outputs.append(out_name)
@@ -913,8 +897,10 @@ class SeparationThread(threading.Thread):
                             final_outputs.append(out_name)
                     # Stems only in M2
                     for f2 in output_files_2:
-                        stem2 = get_stem_clean_m(f2)
-                        if not any(get_stem_clean_m(f) == stem2 for f in output_files_1):
+                        stem2 = stem_from_filename(f2)
+                        if stem2 == "other": stem2 = "instrumental"
+                        
+                        if not any(stem_from_filename(f) in (stem2, "other" if stem2 == "instrumental" else None) for f in output_files_1):
                             clean_ext = os.path.splitext(f2)[1]
                             out_name = f"(Ensemble_{stem2.capitalize()}_M2){clean_ext}"
                             shutil.copy(os.path.join(temp_dir_2, f2), os.path.join(file_output_dir, out_name))

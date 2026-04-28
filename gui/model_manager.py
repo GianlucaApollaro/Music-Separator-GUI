@@ -60,9 +60,10 @@ class ModelManager:
                 "denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt"
             ],
             "Demucs v4 (Multi-Stem)": [
-                "htdemucs",
-                "htdemucs_ft",
-                "htdemucs_6s"
+                "htdemucs.yaml",
+                "htdemucs_ft.yaml",
+                "htdemucs_6s.yaml",
+                "hdemucs_mmi.yaml"
             ],
             "GaboxR67 Custom Models": [
                 "inst_gaboxFlowersV10.ckpt",
@@ -98,14 +99,17 @@ class ModelManager:
         }
 
         self._loading = True
+        self._ready_event = threading.Event()
         self._observers: List[Callable] = []
 
         threading.Thread(target=self._sync_models_json, daemon=True).start()
 
     def add_ready_callback(self, cb: Callable):
-        if not self._loading:
-            wx.CallAfter(cb)
+        if not self._ready_event.is_set():
+            # Wait for ready signal if not set yet
+            threading.Thread(target=lambda: (self._ready_event.wait(), wx.CallAfter(cb)), daemon=True).start()
         else:
+            wx.CallAfter(cb)
             self._observers.append(cb)
 
     def _sync_models_json(self):
@@ -172,7 +176,10 @@ class ModelManager:
 
             self._inject_custom_models()
         except Exception as e:
-            logger.error(f"Error parsing download_checks.json: {e}")
+            logger.error(f"Error syncing models: {e}")
+        finally:
+            self._loading = False
+            self._ready_event.set()
 
     def _inject_custom_models(self):
         becruily_deux_info = {
@@ -337,7 +344,17 @@ class ModelManager:
         }
         self.downloadable_models_by_file["bs_roformer_multistem.safetensors"] = multistem_info
 
+        # Demucs aliases to help resolve and download
+        self.downloadable_aliases["htdemucs"] = {"htdemucs.yaml": ""}
+        self.downloadable_aliases["htdemucs_ft"] = {"htdemucs_ft.yaml": ""}
+        self.downloadable_aliases["htdemucs_6s"] = {"htdemucs_6s.yaml": ""}
+        self.downloadable_aliases["hdemucs_mmi"] = {"hdemucs_mmi.yaml": ""}
+
     def get_model_list(self) -> List[str]:
+        """Wait up to 5 seconds for the model catalog to be ready."""
+        if not self._ready_event.wait(timeout=5.0):
+            logger.warning("Model catalog not ready yet, returning partial list.")
+            
         model_list = []
         for category, mods in self.models_dict.items():
             for m in mods:
@@ -357,26 +374,39 @@ class ModelManager:
         elif model_name in self.downloadable_models_by_file:
             files_to_download = self.downloadable_models_by_file[model_name]
             target_model_filename = model_name
+        
+        if not files_to_download:
+            # Maybe it's a built-in model that requires no download and we haven't mapped it yet
+            return model_name
 
-        if files_to_download:
+        downloaded_files = []
+        try:
             logger_callback(f"Checking models: {model_name}\n")
             for fname, url in files_to_download.items():
                 dest_path = os.path.join(self.models_dir, fname)
                 if not os.path.exists(dest_path):
                     logger_callback(f"Downloading {fname}...\n")
-                    success = download_file(url, dest_path, progress_callback)
-                    if success:
-                        logger_callback(f"Downloaded {fname}\n")
-                    else:
-                        logger_callback(f"Failed to download {fname}\n")
-                        return None
+                    if not download_file(url, dest_path, progress_callback, timeout=(15, 60)):
+                        raise Exception(f"Failed to download {fname}")
+                    downloaded_files.append(dest_path)
+                    logger_callback(f"Downloaded {fname}\n")
                 else:
                     logger_callback(f"Found local: {fname}\n")
                 
                 if dest_path.endswith('.yaml'):
                     self._patch_yaml_config(dest_path)
-                    
-        return target_model_filename
+
+            return target_model_filename
+        except Exception as e:
+            # Cleanup partially downloaded files
+            for f in downloaded_files:
+                try:
+                    if os.path.exists(f):
+                        os.remove(f)
+                except Exception:
+                    pass
+            logger_callback(f"Download failed: {e}\n")
+            return None
 
     def _patch_yaml_config(self, yaml_path: str):
         """Fixes common compatibility issues in custom YAML configs for python-audio-separator."""
@@ -438,12 +468,22 @@ class ModelManager:
 
     def _get_target_from_files(self, model_name: str, files_to_download: dict) -> str:
         demucs_names = ["htdemucs", "htdemucs_ft", "htdemucs_6s", "hdemucs_mmi", "mdx", "mdx_extra", "mdx_q", "mdx_extra_q"]
-        if model_name in demucs_names or "htdemucs" in model_name or "Demucs" in model_name:
-             for f in files_to_download.keys():
-                 if f.endswith('.yaml'):
-                     return f
+        is_demucs = (model_name in demucs_names or 
+                     "htdemucs" in model_name or 
+                     "Demucs" in model_name or
+                     any('demucs' in f.lower() for f in files_to_download.keys()))
+        
+        if is_demucs:
+            # Search for .th file (model weights)
+            for f in files_to_download.keys():
+                if f.endswith('.th'):
+                    return f
+            # Or .yaml if no .th is explicitly in download_files
+            for f in files_to_download.keys():
+                if f.endswith('.yaml'):
+                    return f
         else:
-             for f in files_to_download.keys():
-                if any(f.endswith(ext) for ext in ['.ckpt', '.onnx', '.th', '.pth']):
+            for f in files_to_download.keys():
+                if any(f.endswith(ext) for ext in ['.ckpt', '.onnx', '.pth', '.safetensors']):
                     return f
         return list(files_to_download.keys())[0] if files_to_download else model_name

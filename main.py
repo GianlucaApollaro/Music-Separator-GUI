@@ -45,6 +45,13 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 import wx
+# Force PyInstaller to include these hidden dependencies
+try:
+    import neuralop
+    import einops
+except ImportError:
+    pass
+
 from gui.main_window import MainWindow
 
 def main():

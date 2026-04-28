@@ -4,4 +4,5 @@ requests
 packaging
 neuraloperator==1.0.2
 safetensors
+einops
 # Note: torch will be installed explicitly in install.bat to target nightly/cu128

@@ -60,5 +60,10 @@
     "msg_error_title": "Error",
     "model_tooltip": "Seleccione un modelo o escriba el nombre de un archivo personalizado (p. ej. de download_checks.json)",
     "gpu_mps_tooltip": "GPU: Apple Silicon MPS. Desactívelo para usar solo la CPU.",
-    "gpu_not_available_tooltip": "La GPU no está disponible en esta versión."
+    "gpu_not_available_tooltip": "La GPU no está disponible en esta versión.",
+    "ffmpeg_not_found": "FFmpeg no se encontró en su sistema. La conversión de formato y algunas funciones de separación pueden no funcionar.",
+    "confirm_exit_during_processing": "Hay un proceso de separación en curso. ¿Está seguro de que desea salir e interrumpir el proceso?",
+    "warning": "Advertencia",
+    "confirm": "Confirmar"
 }
+

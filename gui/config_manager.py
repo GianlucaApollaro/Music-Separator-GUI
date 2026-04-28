@@ -1,5 +1,8 @@
 import os
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 from gui.utils import get_app_data_dir
 
@@ -24,14 +27,14 @@ class ConfigManager:
                     data = json.load(f)
                     self.config.update(data)
             except Exception as e:
-                print(f"Failed to load config: {e}")
+                logger.error(f"Failed to load config: {e}")
 
     def save(self):
         try:
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(self.config, f, indent=4)
         except Exception as e:
-            print(f"Failed to save config: {e}")
+            logger.error(f"Failed to save config: {e}")
 
     def get(self, key, default=None):
         return self.config.get(key, default)

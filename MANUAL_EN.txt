@@ -1,6 +1,6 @@
 ===============================================================================
                        MUSIC SEPARATOR - USER MANUAL                       
-                       ENGLISH MANUAL (EN)
+                       ENGLISH MANUAL (EN) - v1.3
 ===============================================================================
 
 Welcome to Music separator, a powerful AI-driven audio separation tool based on 
@@ -17,89 +17,75 @@ WINDOWS:
 macOS (Apple Silicon M1/M2/M3/M4):
 - Ensure you have the Xcode command line tools installed: 
   open Terminal and run 'xcode-select --install'
-- Ensure you have Homebrew installed: 
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-- Restart the terminal, then install necessary dependencies via Terminal: 
-  brew install ffmpeg libsndfile python@3.12
-- Right-click and 'Open' the 'install_mac.command' (or '.sh') file.
-- Use 'run_mac.command' (or '.sh') to launch the app.
-- (If you have permission issues with scripts, open Terminal and run 
-  'chmod +x *.command' or 'chmod +x *.sh' in the app folder).
-
+- Right-click and 'Open' the 'install_mac.command' file.
+- Use 'run_mac.command' to launch the app.
+- NOTE: As of v1.3, FFmpeg binaries are included in the Mac package, so 
+  installing them via Homebrew is no longer strictly required.
 
 2. BASIC USAGE (SINGLE MODEL)
 -------------------------------------------------------------------------------
 1. Select your input audio file (WAV, FLAC, MP3, etc.).
 2. Choose an Output Directory.
 3. Select a Model from the dropdown (categorized by type: Vocals, Drums, etc.).
-4. Select the output Bit Depth (16-bit is standard, 32-bit for high-end).
+4. Select the output format (WAV, FLAC, or MP3 at 320kbps).
 5. Click "Start Separation".
-
 
 3. NATIVE ENSEMBLE (MIXING MODELS)
 -------------------------------------------------------------------------------
 Tick the "Ensemble" checkbox to select TWO different models. The application 
-will process the file with both and mathematically fuse the results (using 
-average, max, or min algorithms) for potentially better isolation.
-
+will process the file with both and fuse the results.
+- Ensemble Algorithm: You can choose how to mix the tracks (Average, Min, Max, Median).
+- Recommended: "avg_wave" (Average) for the most natural sound.
 
 4. CHAINED ENSEMBLE PRESETS (ADVANCED)
 -------------------------------------------------------------------------------
 The "Preset" dropdown allows you to run "Chained" processes where the output 
-of one model is automatically fed into another. 
-(Note: Selecting a Preset overrides individual model selection).
+of one model is automatically fed into another.
 
 AVAILABLE PRESETS:
 - Vocal Split: Separates Vocals/Inst, then splits Vocals into Lead and Backing.
 - Vocal De-Reverb: Separates Vocals, then removes reverb/echo from the voice.
 - Ultimate Stems (7 Tracks): Extracts high-quality Vocals and Instrumental, 
-  then splits the instrumental into 5 parts (Bass, Drums, Piano, Guitar, Other).
+  then splits the instrumental into 5 parts (Bass, Drums, Piano, Guitar, Other) 
+  and also saves an "_Extra" stem for residuals.
+- Ultimate Stems + Drum Split: Same as above, but further splits the drums 
+  into Kick, Snare, Cymbals, Toms, and more (10+ total tracks).
+- Guitar Extraction: Specialized preset to isolate guitars from the track.
 - Male/Female Split: Specifically isolates male vs. female voices.
 - Live Restore: Extracts the Crowd/Applause, then cleans the remaining stage 
   audio into Vocals and Instrumental.
-- RVC Vocal Prep: Extracts the clean Lead vocal without reverb, isolates the 
-  Reverb track, and keeps the Instrumental with Backing Vocals for Voice 
-  Cloning preparation.
+- RVC Vocal Prep: Extracts the clean Lead vocal for Voice Cloning via RVC.
 
-
-5. SPECIALIZED MODELS
+5. GABOXR67 CUSTOM MODELS
 -------------------------------------------------------------------------------
-- Drum Separation: Splitting drums into Kick, Snare, Toms, and Cymbals.
-- Aspiration: Isolate breaths and vocal "air" for surgical cleaning.
+This version integrates advanced custom models by GaboxR67:
+- Instrumental V10: For high-fidelity instrumental tracks.
+- Experimental Inst_Fv8: Experimental model for surgical separations.
+- Lead Vocal Dereverb: Specialized in removing difficult reverb from vocals.
+- Last BS Roformer: Balanced high-quality model for general separation.
 
-
-6. OUTPUT FILENAMES
+6. CHUNKING (LONG FILES / OUT-OF-MEMORY PREVENTION)
 -------------------------------------------------------------------------------
-The program uses clean suffixes for easy identification:
-_Vocals, _Instrumental, _Lead, _Backing, _DeReverb, _Male, _Female, _Crowd.
+If you experience Out-of-Memory (OOM) errors or crashes with long audio files:
+- Check "Enable Chunking".
+- Select the "Chunk Size" (e.g., 1 min or 2 min).
+- The program will split the audio into small chunks, process them one by one, 
+  and perfectly reassemble them at the end without interruptions.
 
-
-7. CHUNKING (LONG FILES / OUT-OF-MEMORY PREVENTION)
+7. BATCH PROCESSING (FILES AND FOLDERS)
 -------------------------------------------------------------------------------
-If you experience Out-of-Memory (OOM) errors or crashes with long audio files,
-enable the "Enable Chunking" option. The audio will be split into segments of
-the specified duration (in seconds), processed one chunk at a time, and then
-automatically reassembled into the full output file.
+You can process multiple audio files automatically:
+- Multi-Select: Click "Browse" (files) and select multiple files at once.
+- Folder Select: Click "Browse Folder" to instantly load all audio files 
+  contained in a directory and its subdirectories.
+- The program will run the full process sequentially on each track.
 
-- Check "Enable Chunking" to activate this feature.
-- Select the "Chunk Size" from the dropdown (1 min, 2 min, etc.). Default: 1 min.
-- Recommended values: 1 min for GPU with <6GB VRAM, 2-5 min for larger ones.
-- Note: Chunking may slightly affect separation quality at segment boundaries.
-
-
-8. BATCH PROCESSING (MULTI-FILE)
+8. TECHNICAL NOTES AND SUFFIXES
 -------------------------------------------------------------------------------
-You can process multiple audio files automatically in sequence.
-- Click "Browse" next to the Input Audio field.
-- Select multiple files (hold Ctrl/Cmd or Shift).
-- The input bar will display the selected files separated by a "|" symbol.
-- Choose your preferred model or preset, set the output directory, and click "Start".
-- The program will automatically run the full separation flow on each file 
-  sequentially, saving all results in your output folder.
+Output files will have clear suffixes such as:
+_Vocals, _Instrumental, _Lead, _Backing, _DeReverb, _Other, _Extra, _Drums.
 
+The app automatically saves your preferences (output folder, models, 
+settings) for your next session.
 
-9. HARDWARE ACCELERATION
--------------------------------------------------------------------------------
-- Windows: Uses CUDA (NVIDIA) or CPU.
-- macOS: Uses MPS (Metal Performance Shaders) on M-series chips for 
-  extremely fast processing via the Neural Engine.
+===============================================================================

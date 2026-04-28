@@ -23,16 +23,19 @@ else:
     # If running as normal Python script
     base_dir = os.path.dirname(os.path.abspath(__file__))
 
-ffmpeg_path = os.path.join(base_dir, 'ffmpeg_bin')
+# Determine bundled ffmpeg directory based on platform
+ffmpeg_bundled_dir = 'ffmpeg_Mac_bin' if sys.platform == 'darwin' else 'ffmpeg_bin'
+ffmpeg_path = os.path.join(base_dir, ffmpeg_bundled_dir)
+
 if os.path.exists(ffmpeg_path):
     os.environ["PATH"] = ffmpeg_path + os.pathsep + os.environ.get("PATH", "")
 
-# Special PATH handling for macOS to find Homebrew or local FFmpeg
+# Special PATH handling for macOS to find Homebrew or local FFmpeg as fallbacks
 if sys.platform == 'darwin':
     extra_paths = ["/opt/homebrew/bin", "/usr/local/bin"]
     for path in extra_paths:
         if path not in os.environ["PATH"]:
-            os.environ["PATH"] = path + os.pathsep + os.environ["PATH"]
+            os.environ["PATH"] = os.environ["PATH"] + os.pathsep + path
 
 # Prevent subprocesses (like FFmpeg) from opening new console windows
 if os.name == 'nt':

@@ -49,7 +49,7 @@ class PresetManager:
                 "piano": "_Piano",
                 "guitar": "_Guitar",
                 "other": "_Other",
-                "vocals": None  # Discard empty vocals extracted from instrumental
+                "vocals": "_Extra"
             }
         },
         "preset_chorus_hq": {
@@ -81,7 +81,7 @@ class PresetManager:
                 "guitar": "_Guitar",
                 "other": "_Other",
                 "drums": "_Drums_Stereo",
-                "vocals": None  # Discard empty vocals extracted from instrumental
+                "vocals": "_Extra"
             },
             "m3_rename_map": {
                 "kick": "_Kick",

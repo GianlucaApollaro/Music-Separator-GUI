@@ -63,6 +63,12 @@ class ModelManager:
                 "htdemucs",
                 "htdemucs_ft",
                 "htdemucs_6s"
+            ],
+            "GaboxR67 Custom Models": [
+                "inst_gaboxFlowersV10.ckpt",
+                "Inst_Fv8.ckpt",
+                "Lead_VocalDereverb.ckpt",
+                "last_bs_roformer.ckpt"
             ]
         }
 
@@ -181,6 +187,34 @@ class ModelManager:
         }
         self.downloadable_models_by_file["MDX23C-DrumSep-aufr33-jarredou.ckpt"] = drumsep_info
 
+        gabox_v10_info = {
+            "inst_gaboxFlowersV10.ckpt": "https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/inst_gaboxFlowersV10.ckpt",
+            "inst_gaboxFlowersV10.yaml": "https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/v10.yaml"
+        }
+        self.downloadable_models["Roformer Model: Gabox Instrumental V10"] = gabox_v10_info
+        self.downloadable_models_by_file["inst_gaboxFlowersV10.ckpt"] = gabox_v10_info
+
+        gabox_fv8_info = {
+            "Inst_Fv8.ckpt": "https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/experimental/Inst_Fv8.ckpt",
+            "Inst_Fv8.yaml": "https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/v10.yaml"
+        }
+        self.downloadable_models["Roformer Model: Gabox Experimental Inst_Fv8"] = gabox_fv8_info
+        self.downloadable_models_by_file["Inst_Fv8.ckpt"] = gabox_fv8_info
+
+        gabox_dereverb_info = {
+            "Lead_VocalDereverb.ckpt": "https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/experimental/Lead_VocalDereverb.ckpt",
+            "Lead_VocalDereverb.yaml": "https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/melbandroformers/instrumental/v10.yaml"
+        }
+        self.downloadable_models["Roformer Model: Lead Vocal Dereverb | (by GaboxR67)"] = gabox_dereverb_info
+        self.downloadable_models_by_file["Lead_VocalDereverb.ckpt"] = gabox_dereverb_info
+
+        gabox_last_bs_info = {
+            "last_bs_roformer.ckpt": "https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/bsroformers/last_bs_roformer.ckpt",
+            "last_bs_roformer.yaml": "https://huggingface.co/GaboxR67/MelBandRoformers/resolve/main/bsroformers/karaoke_bs_roformer.yaml"
+        }
+        self.downloadable_models["Roformer Model: Last BS Roformer | (by GaboxR67)"] = gabox_last_bs_info
+        self.downloadable_models_by_file["last_bs_roformer.ckpt"] = gabox_last_bs_info
+
     def get_model_list(self) -> List[str]:
         model_list = []
         for category, mods in self.models_dict.items():
@@ -216,7 +250,60 @@ class ModelManager:
                         return None
                 else:
                     logger_callback(f"Found local: {fname}\n")
+                
+                if dest_path.endswith('.yaml'):
+                    self._patch_yaml_config(dest_path)
+                    
         return target_model_filename
+
+    def _patch_yaml_config(self, yaml_path: str):
+        """Fixes common compatibility issues in custom YAML configs for python-audio-separator."""
+        basename = os.path.basename(yaml_path)
+        # Whitelist of models to patch
+        if basename not in ["inst_gaboxFlowersV10.yaml", "Inst_Fv8.yaml", "Lead_VocalDereverb.yaml", "last_bs_roformer.yaml"]:
+            return
+
+        try:
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            changed = False
+            
+            # Force audio-separator to recognize this as a Roformer
+            if "is_roformer:" not in content:
+                content = "is_roformer: true\n" + content
+                changed = True
+
+            # Explicitly declare model architecture so roformer_loader doesn't guess
+            if "model_type:" not in content:
+                # If it's the last_bs_roformer, it's a BS Roformer, otherwise it's MelBand
+                mtype = "bs_roformer" if "last_bs_roformer" in basename else "mel_band_roformer"
+                content = f"model_type: {mtype}\n" + content
+                changed = True
+                
+            # Experimental models (Inst_Fv8, Dereverb) use dim: 384 and depth: 6, unlike v10 which uses 256/12
+            if basename in ["Inst_Fv8.yaml", "Lead_VocalDereverb.yaml"]:
+                if "  dim: 256" in content:
+                    content = content.replace("  dim: 256", "  dim: 384")
+                    changed = True
+                if "  depth: 12" in content:
+                    content = content.replace("  depth: 12", "  depth: 6")
+                    changed = True
+                
+            # Revert any broken num_subbands/norm/act replacements from previous faulty runs
+            if "  norm: Identity" in content:
+                content = content.replace("  norm: Identity\n  act: GELU\n", "")
+                changed = True
+            if "  num_subbands:" in content:
+                content = content.replace("  num_subbands:", "  num_bands:")
+                changed = True
+
+            if changed:
+                with open(yaml_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                logger.info(f"Patched compatibility issues in {yaml_path}")
+        except Exception as e:
+            logger.warning(f"Failed to patch YAML {yaml_path}: {e}")
 
     def _get_target_from_files(self, model_name: str, files_to_download: dict) -> str:
         demucs_names = ["htdemucs", "htdemucs_ft", "htdemucs_6s", "hdemucs_mmi", "mdx", "mdx_extra", "mdx_q", "mdx_extra_q"]

@@ -53,5 +53,12 @@
     "browse_folder": "Elegir Carpeta",
     "choose_input_dir": "Elige la carpeta de entrada",
     "no_audio_files_found": "No se encontraron archivos de audio en la carpeta seleccionada.",
-    "msg_no_files": "Sin archivos"
+    "msg_no_files": "Sin archivos",
+    "choose_output_dir": "Seleccionar carpeta de salida",
+    "open_media_files": "Abrir archivos multimedia",
+    "msg_success_title": "Éxito",
+    "msg_error_title": "Error",
+    "model_tooltip": "Seleccione un modelo o escriba el nombre de un archivo personalizado (p. ej. de download_checks.json)",
+    "gpu_mps_tooltip": "GPU: Apple Silicon MPS. Desactívelo para usar solo la CPU.",
+    "gpu_not_available_tooltip": "La GPU no está disponible en esta versión."
 }

@@ -17,9 +17,9 @@ def stem_from_filename(filename: str) -> str:
         parts = base.split("_")
         stem = parts[-1].lower().strip("()") if parts else base.lower()
         
-    # Sinonimi per compatibilità
-    if stem == "other":
-        stem = "instrumental"
+    # Sinonimi per compatibilità (rimosso per permettere distinzione tra Other e Instrumental)
+    # if stem == "other":
+    #     stem = "instrumental"
         
     return stem
 

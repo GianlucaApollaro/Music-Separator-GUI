@@ -117,7 +117,7 @@ class MainWindow(wx.Frame):
 
         self.cb_model = wx.ComboBox(self.panel, choices=self.model_list, style=wx.CB_DROPDOWN)
         self.cb_model.SetValue(config.get("model_1", self.model_list[0] if self.model_list else "")) # Default
-        self.cb_model.SetToolTip("Select a model or type a custom model filename (e.g. from download_checks.json)")
+        self.cb_model.SetToolTip(i18n.tr("model_tooltip"))
         hbox3.Add(self.cb_model, proportion=1, flag=wx.EXPAND)
         vbox.Add(hbox3, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
 
@@ -185,11 +185,11 @@ class MainWindow(wx.Frame):
         if has_gpu:
             self.chk_gpu.SetValue(True)
             if has_mps and not has_cuda:
-                self.chk_gpu.SetToolTip("GPU: Apple Silicon MPS. Deselect to use CPU only.")
+                self.chk_gpu.SetToolTip(i18n.tr("gpu_mps_tooltip"))
         else:
             self.chk_gpu.SetValue(False)
             self.chk_gpu.Disable()
-            self.chk_gpu.SetToolTip("GPU is not available in this build.")
+            self.chk_gpu.SetToolTip(i18n.tr("gpu_not_available_tooltip"))
             
         hbox4.Add(self.chk_gpu)
 
@@ -314,6 +314,15 @@ class MainWindow(wx.Frame):
         self.btn_stop.SetLabel(i18n.tr("stop"))
         self.st_log.SetLabel(i18n.tr("logs"))
         
+        self.cb_model.SetToolTip(i18n.tr("model_tooltip"))
+        if self.chk_gpu.IsEnabled():
+            # Only if it was MPS
+            import torch
+            if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available() and not torch.cuda.is_available():
+                self.chk_gpu.SetToolTip(i18n.tr("gpu_mps_tooltip"))
+        else:
+            self.chk_gpu.SetToolTip(i18n.tr("gpu_not_available_tooltip"))
+        
         self.st_preset.SetLabel(i18n.tr("preset_label"))
         old_sel = self.cb_preset.GetSelection()
         if old_sel == wx.NOT_FOUND:
@@ -333,7 +342,7 @@ class MainWindow(wx.Frame):
         self.UpdateLabels()
 
     def OnBrowseInput(self, event):
-        with wx.FileDialog(self, "Open Media file(s)", wildcard="Media files (*.mp3;*.wav;*.flac;*.m4a;*.mp4;*.mkv)|*.mp3;*.wav;*.flac;*.m4a;*.mp4;*.mkv",
+        with wx.FileDialog(self, i18n.tr("open_media_files"), wildcard="Media files (*.mp3;*.wav;*.flac;*.m4a;*.mp4;*.mkv)|*.mp3;*.wav;*.flac;*.m4a;*.mp4;*.mkv",
                            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE) as fileDialog:
             if fileDialog.ShowModal() == wx.ID_CANCEL:
                 return
@@ -358,7 +367,7 @@ class MainWindow(wx.Frame):
                 wx.MessageBox(i18n.tr("no_audio_files_found"), i18n.tr("msg_no_files"), wx.OK | wx.ICON_WARNING)
 
     def OnBrowseOutput(self, event):
-        with wx.DirDialog(self, "Choose Output Directory",
+        with wx.DirDialog(self, i18n.tr("choose_output_dir"),
                           style=wx.DD_DEFAULT_STYLE | wx.DD_DIR_MUST_EXIST) as dirDialog:
             if dirDialog.ShowModal() == wx.ID_CANCEL:
                 return
@@ -377,9 +386,9 @@ class MainWindow(wx.Frame):
         self.btn_stop.Disable()
         self.gauge.SetValue(100)
         if event.success:
-            wx.MessageBox(i18n.tr("msg_success"), "Success", wx.OK | wx.ICON_INFORMATION)
+            wx.MessageBox(i18n.tr("msg_success"), i18n.tr("msg_success_title"), wx.OK | wx.ICON_INFORMATION)
         else:
-            wx.MessageBox(i18n.tr("msg_error"), "Error", wx.OK | wx.ICON_ERROR)
+            wx.MessageBox(i18n.tr("msg_error"), i18n.tr("msg_error_title"), wx.OK | wx.ICON_ERROR)
 
     def OnStart(self, event):
         input_string = self.tc_input.GetValue()
@@ -398,19 +407,19 @@ class MainWindow(wx.Frame):
         config.set("chunk_size_idx", self.cb_chunk.GetSelection())
 
         if not input_string:
-            wx.MessageBox(i18n.tr("msg_select_input"), "Error", wx.OK | wx.ICON_ERROR)
+            wx.MessageBox(i18n.tr("msg_select_input"), i18n.tr("msg_error_title"), wx.OK | wx.ICON_ERROR)
             return
 
         input_files = [p.strip().strip('"') for p in input_string.split("|") if os.path.exists(p.strip().strip('"'))]
         if not input_files:
-            wx.MessageBox(i18n.tr("msg_select_input"), "Error", wx.OK | wx.ICON_ERROR)
+            wx.MessageBox(i18n.tr("msg_select_input"), i18n.tr("msg_error_title"), wx.OK | wx.ICON_ERROR)
             return
 
         if not os.path.exists(output_dir):
             try:
                 os.makedirs(output_dir)
             except OSError:
-                wx.MessageBox(i18n.tr("msg_create_output_err"), "Error", wx.OK | wx.ICON_ERROR)
+                wx.MessageBox(i18n.tr("msg_create_output_err"), i18n.tr("msg_error_title"), wx.OK | wx.ICON_ERROR)
                 return
 
         # Resolve chunk_duration

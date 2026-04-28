@@ -48,6 +48,7 @@ pyinstaller --windowed \
     --collect-all audio_separator \
     --add-data "i18n:i18n" \
     --add-data "gui:gui" \
+    --add-data "ffmpeg_Mac_bin:ffmpeg_Mac_bin" \
     --name "$APP_NAME" \
     main.py
 

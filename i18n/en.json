@@ -53,5 +53,12 @@
     "browse_folder": "Browse Folder",
     "choose_input_dir": "Choose Input Directory",
     "no_audio_files_found": "No audio files found in the selected folder.",
-    "msg_no_files": "No files"
+    "msg_no_files": "No files",
+    "choose_output_dir": "Choose Output Directory",
+    "open_media_files": "Open Media file(s)",
+    "msg_success_title": "Success",
+    "msg_error_title": "Error",
+    "model_tooltip": "Select a model or type a custom model filename (e.g. from download_checks.json)",
+    "gpu_mps_tooltip": "GPU: Apple Silicon MPS. Deselect to use CPU only.",
+    "gpu_not_available_tooltip": "GPU is not available in this build."
 }

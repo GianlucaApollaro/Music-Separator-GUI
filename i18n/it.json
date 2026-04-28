@@ -53,5 +53,12 @@
     "browse_folder": "Seleziona Cartella",
     "choose_input_dir": "Seleziona la cartella di input",
     "no_audio_files_found": "Nessun file audio trovato nella cartella selezionata.",
-    "msg_no_files": "Nessun file"
+    "msg_no_files": "Nessun file",
+    "choose_output_dir": "Seleziona la cartella di output",
+    "open_media_files": "Apri file multimediali",
+    "msg_success_title": "Successo",
+    "msg_error_title": "Errore",
+    "model_tooltip": "Seleziona un modello o scrivi il nome di un file personalizzato (es. da download_checks.json)",
+    "gpu_mps_tooltip": "GPU: Apple Silicon MPS. Deseleziona per usare solo la CPU.",
+    "gpu_not_available_tooltip": "La GPU non è disponibile in questa versione."
 }

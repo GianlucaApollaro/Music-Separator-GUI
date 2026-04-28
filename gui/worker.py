@@ -131,27 +131,53 @@ class SeparationThread(threading.Thread):
                     custom_mdxc = {
                         "Roformer Model: MelBand Roformer Deux | (by becruily)": {
                             "filename": "mel_band_roformer_becruily_deux.ckpt",
-                            "download_files": ["mel_band_roformer_becruily_deux.ckpt", "config_deux_becruily.yaml"]
+                            "download_files": ["mel_band_roformer_becruily_deux.ckpt", "config_deux_becruily.yaml"],
+                            "is_roformer": True
                         },
                         "Roformer Model: MelBand Roformer Karaoke | (by becruily)": {
                             "filename": "mel_band_roformer_karaoke_becruily.ckpt",
-                            "download_files": ["mel_band_roformer_karaoke_becruily.ckpt", "config_mel_band_roformer_karaoke_becruily.yaml"]
+                            "download_files": ["mel_band_roformer_karaoke_becruily.ckpt", "config_mel_band_roformer_karaoke_becruily.yaml"],
+                            "is_roformer": True
                         },
                         "Roformer Model: MelBand Roformer Guitar | (by becruily)": {
                             "filename": "mel_band_roformer_guitar_becruily.ckpt",
-                            "download_files": ["mel_band_roformer_guitar_becruily.ckpt", "mel_band_roformer_guitar_becruily.yaml"]
+                            "download_files": ["mel_band_roformer_guitar_becruily.ckpt", "mel_band_roformer_guitar_becruily.yaml"],
+                            "is_roformer": True
                         },
                         "Roformer Model: BS-Roformer Karaoke | (by frazer & becruily)": {
                             "filename": "bs_roformer_karaoke_frazer_becruily.ckpt",
-                            "download_files": ["bs_roformer_karaoke_frazer_becruily.ckpt", "bs_roformer_karaoke_frazer_becruily.yaml"]
+                            "download_files": ["bs_roformer_karaoke_frazer_becruily.ckpt", "bs_roformer_karaoke_frazer_becruily.yaml"],
+                            "is_roformer": True
                         },
                         "Roformer Model: Mel-Roformer-Crowd-Aufr33-Viperx": {
                             "filename": "mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144.ckpt",
-                            "download_files": ["mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144.ckpt", "mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144_config.yaml"]
+                            "download_files": ["mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144.ckpt", "mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144_config.yaml"],
+                            "is_roformer": True
                         },
                         "Roformer Model: Denoise Advanced | (by aufr33)": {
                             "filename": "denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt",
-                            "download_files": ["denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt", "denoise_mel_band_roformer_aufr33_sdr_27.9959.yaml"]
+                            "download_files": ["denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt", "denoise_mel_band_roformer_aufr33_sdr_27.9959.yaml"],
+                            "is_roformer": True
+                        },
+                        "Roformer Model: Gabox Instrumental V10": {
+                            "filename": "inst_gaboxFlowersV10.ckpt",
+                            "download_files": ["inst_gaboxFlowersV10.ckpt", "inst_gaboxFlowersV10.yaml"],
+                            "is_roformer": True
+                        },
+                        "Roformer Model: Gabox Experimental Inst_Fv8": {
+                            "filename": "Inst_Fv8.ckpt",
+                            "download_files": ["Inst_Fv8.ckpt", "Inst_Fv8.yaml"],
+                            "is_roformer": True
+                        },
+                        "Roformer Model: Lead Vocal Dereverb | (by GaboxR67)": {
+                            "filename": "Lead_VocalDereverb.ckpt",
+                            "download_files": ["Lead_VocalDereverb.ckpt", "Lead_VocalDereverb.yaml"],
+                            "is_roformer": True
+                        },
+                        "Roformer Model: Last BS Roformer | (by GaboxR67)": {
+                            "filename": "last_bs_roformer.ckpt",
+                            "download_files": ["last_bs_roformer.ckpt", "last_bs_roformer.yaml"],
+                            "is_roformer": True
                         }
                     }
                     
@@ -195,6 +221,9 @@ class SeparationThread(threading.Thread):
                                 "filename": target_file,
                                 "download_files": list(file_info.keys())
                             }
+                            
+                            if model_type == "MDXC" and "roformer" in friendly_name.lower():
+                                models[model_type][friendly_name]["is_roformer"] = True
                             
                     return models
                 
@@ -729,7 +758,13 @@ class SeparationThread(threading.Thread):
             wx.PostEvent(self.parent, DoneEvent(True, i18n.tr("msg_success")))
 
         except Exception as e:
+            import traceback
             error_msg = str(e)
+            if not error_msg.strip():
+                error_msg = getattr(e, 'message', repr(e))
+            full_trace = traceback.format_exc()
+            error_msg += f"\n\nTraceback:\n{full_trace}"
+            print(f"Exception during separation: {full_trace}")
             # Detect Apple Silicon MPS out-of-memory error and show a clear message
             if "MPS backend out of memory" in error_msg or "MPS allocated" in error_msg:
                 friendly = (

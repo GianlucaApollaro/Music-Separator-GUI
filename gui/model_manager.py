@@ -87,6 +87,13 @@ class ModelManager:
                 "kimmel_unwa_ft2.ckpt",
                 "kimmel_unwa_ft2_bleedless.ckpt",
                 "kimmel_unwa_ft3_prev.ckpt"
+            ],
+            "Dereverb / Echo Models (by Sucial)": [
+                "dereverb-echo_mel_band_roformer_sdr_10.0169.ckpt",
+                "dereverb_echo_mbr_v2_sdr_dry_13.4843.ckpt",
+            ],
+            "Multi-Stem Models": [
+                "bs_roformer_multistem.safetensors",
             ]
         }
 
@@ -305,6 +312,31 @@ class ModelManager:
                 _kimmel_yaml: _kimmel_yaml_url,
             }
 
+        # Sucial Dereverb/Echo models (MelBandRoformer, standard architecture)
+        _sucial_base = "https://huggingface.co/Sucial/Dereverb-Echo_Mel_Band_Roformer/resolve/main/"
+        # v1: large model (836 MB), 2 stems (dry + other)
+        dereverb_v1_info = {
+            "dereverb-echo_mel_band_roformer_sdr_10.0169.ckpt": _sucial_base + "dereverb-echo_mel_band_roformer_sdr_10.0169.ckpt",
+            "config_dereverb-echo_mel_band_roformer.yaml": _sucial_base + "config_dereverb-echo_mel_band_roformer.yaml",
+        }
+        self.downloadable_models_by_file["dereverb-echo_mel_band_roformer_sdr_10.0169.ckpt"] = dereverb_v1_info
+
+        # v2: lighter model (456 MB), 1 stem (dry only, SDR 13.48)
+        dereverb_v2_info = {
+            "dereverb_echo_mbr_v2_sdr_dry_13.4843.ckpt": _sucial_base + "dereverb_echo_mbr_v2_sdr_dry_13.4843.ckpt",
+            "config_dereverb_echo_mbr_v2.yaml": _sucial_base + "config_dereverb_echo_mbr_v2.yaml",
+        }
+        self.downloadable_models_by_file["dereverb_echo_mbr_v2_sdr_dry_13.4843.ckpt"] = dereverb_v2_info
+
+        # AEmotionStudio BS-Roformer Multistem (4 stems: drums, bass, other, vocals)
+        # Uses .safetensors format — handled by the patched loader in worker.py
+        _aemotion_base = "https://huggingface.co/AEmotionStudio/roformer-models/resolve/main/bs_roformer/multistem/"
+        multistem_info = {
+            "bs_roformer_multistem.safetensors": _aemotion_base + "model.safetensors",
+            "bs_roformer_multistem_config.yaml": _aemotion_base + "config.yaml",
+        }
+        self.downloadable_models_by_file["bs_roformer_multistem.safetensors"] = multistem_info
+
     def get_model_list(self) -> List[str]:
         model_list = []
         for category, mods in self.models_dict.items():
@@ -354,7 +386,9 @@ class ModelManager:
             "bs_large_v2_inst.yaml", "bs_roformer_inst_hyperacev2.yaml", "bs_roformer_voc_hyperacev2.yaml",
             "BS-Roformer-Resurrection.yaml", "BS-Roformer-Resurrection-Inst.yaml", "big_beta7.yaml",
             "bs_roformer_revive.yaml", "melband_roformer_instvoc_duality.yaml", "bs_roformer_fno.yaml",
-            "config_kimmel_unwa_ft.yaml"
+            "config_kimmel_unwa_ft.yaml",
+            "config_dereverb-echo_mel_band_roformer.yaml", "config_dereverb_echo_mbr_v2.yaml",
+            "bs_roformer_multistem_config.yaml",
         ]
         if basename not in ["inst_gaboxFlowersV10.yaml", "Inst_Fv8.yaml", "Lead_VocalDereverb.yaml", "last_bs_roformer.yaml"] + unwa_yamls:
             return

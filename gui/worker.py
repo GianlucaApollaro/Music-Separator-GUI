@@ -271,7 +271,7 @@ class SeparationThread(threading.Thread):
                 original_load_model = RoformerLoader.load_model
                 model_dir_for_patch = os.path.join(os.getcwd(), 'models')
 
-                # Map from model .ckpt filename to its corresponding .yaml filename
+                # Map from model filename to its corresponding .yaml filename
                 custom_ckpt_to_yaml = {
                     'mel_band_roformer_guitar_becruily.ckpt':          'mel_band_roformer_guitar_becruily.yaml',
                     'mel_band_roformer_karaoke_becruily.ckpt':         'config_mel_band_roformer_karaoke_becruily.yaml',
@@ -286,6 +286,11 @@ class SeparationThread(threading.Thread):
                     'kimmel_unwa_ft2.ckpt':                            'config_kimmel_unwa_ft.yaml',
                     'kimmel_unwa_ft2_bleedless.ckpt':                  'config_kimmel_unwa_ft.yaml',
                     'kimmel_unwa_ft3_prev.ckpt':                       'config_kimmel_unwa_ft.yaml',
+                    # Sucial Dereverb/Echo models
+                    'dereverb-echo_mel_band_roformer_sdr_10.0169.ckpt': 'config_dereverb-echo_mel_band_roformer.yaml',
+                    'dereverb_echo_mbr_v2_sdr_dry_13.4843.ckpt':       'config_dereverb_echo_mbr_v2.yaml',
+                    # AEmotionStudio Multistem (.safetensors)
+                    'bs_roformer_multistem.safetensors':                'bs_roformer_multistem_config.yaml',
                 }
 
                 # --- PYTORCH 2.6+ WEIGHTS_ONLY FIX (Hardened) ---
@@ -398,13 +403,22 @@ class SeparationThread(threading.Thread):
                                     model = MelBandRoformer(**model_args)
 
                                 if os.path.exists(model_path):
-                                    # Use weights_only=False to allow loading GELU and other common Roformer globals
-                                    try:
-                                        state_dict = torch.load(model_path, map_location=device, weights_only=False)
-                                    except TypeError:
-                                        state_dict = torch.load(model_path, map_location=device)
-                                        
-                                    sd = state_dict.get('state_dict', state_dict.get('model', state_dict))
+                                    # Load weights — supports both .safetensors and .ckpt/.pth formats
+                                    if model_path.endswith('.safetensors'):
+                                        try:
+                                            from safetensors.torch import load_file as _st_load
+                                            sd = _st_load(model_path, device=str(device))
+                                        except ImportError:
+                                            raise RuntimeError(
+                                                "safetensors library not found. "
+                                                "Install it with: pip install safetensors"
+                                            )
+                                    else:
+                                        try:
+                                            state_dict = torch.load(model_path, map_location=device, weights_only=False)
+                                        except TypeError:
+                                            state_dict = torch.load(model_path, map_location=device)
+                                        sd = state_dict.get('state_dict', state_dict.get('model', state_dict))
                                     
                                     # Detect custom architecture from weight key signatures
                                     has_segm = any(".segm." in k for k in sd.keys())

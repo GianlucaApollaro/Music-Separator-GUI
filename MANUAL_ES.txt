@@ -1,44 +1,52 @@
 ===============================================================================
                        MUSIC SEPARATOR - MANUAL DE USUARIO                       
-                       MANUAL EN ESPAÑOL (ES) - v1.3
+                       MANUAL EN ESPAÑOL (ES) - v1.4
 ===============================================================================
 
 Bienvenido a Music separator, una potente herramienta de separacion de audio 
-controlada por Inteligencia Artificial y basada en arquitecturas avanzate 
+controlada por Inteligencia Artificial y basada en arquitecturas avanzadas 
 Roformer y MDX. Esta aplicacion te permite aislar voces, instrumentos y 
 elementos especificos con calidad de estudio.
 
 1. INSTALACIÓN
 -------------------------------------------------------------------------------
 WINDOWS:
-- Ejecuta 'install.bat' para crear el entorno e instalar dependencias.
-- Usa 'run.bat' para lanzar la aplicacion.
-- Si no tienes una tarjeta grafica NVIDIA, usa 'install_cpu.bat' y 'run_Cpu.bat'.
+- Si descargaste la versión precompilada, inicia 'Music separator.exe' directamente.
+- Si instalas desde la fuente:
+  - Ejecuta 'install.bat' para crear el entorno e instalar dependencias.
+  - Usa 'run.bat' para lanzar la aplicacion.
+  - Si no tienes una tarjeta grafica NVIDIA, usa 'install_cpu.bat' y 'run_Cpu.bat'.
 
 macOS (Apple Silicon M1/M2/M3/M4):
-- Asegurate de tener instaladas las herramientas de comandos de Xcode: 
-  abre la Terminal y ejecuta 'xcode-select --install'
-- Haz clic derecho y selecciona 'Abrir' en el archivo 'install_mac.command'.
-- Usa 'run_mac.command' para iniciar la aplicacion.
-- NOTA: A partir de la v1.3, los binarios de FFmpeg estan incluidos en el 
-  paquete para Mac, por lo que ya no es obligatorio instalarlos via Homebrew.
+- Extrae el archivo .zip y mueve la carpeta a /Applications.
+- Haz clic derecho y selecciona 'Abrir' en 'Music separator.app'.
+- NOTA: FFmpeg esta incluido. Si tienes problemas de permisos, consulta el 
+  README para instrucciones sobre 'xattr'.
 
-2. USO BÁSICO (MODELO ÚNICO)
+2. PRE-PROCESAMIENTO AUTOMÁTICO (NUEVO en v1.4)
 -------------------------------------------------------------------------------
-1. Seleccione su archivo de audio de entrada (WAV, FLAC, MP3, etc.).
+Music separator ahora prepara tu audio para obtener los mejores resultados:
+- Normalización: Todo el audio se normaliza al pico de -0.1 dBFS antes de la 
+  separacion, asegurando un volumen optimo sin distorsion.
+- Downmix Estéreo: Los archivos multicanal (ej. 5.1 o 7.1) se convierten 
+  automaticamente a estereo antes de pasar por los modelos de IA.
+
+3. USO BÁSICO (MODELO ÚNICO)
+-------------------------------------------------------------------------------
+1. Seleccione su archivo (WAV, FLAC, MP3, MP4, MKV, etc.).
 2. Elija un Directorio de Salida.
 3. Seleccione un Modelo del menu (categorizado por tipo: Voces, Bateria, etc.).
 4. Seleccione el formato de salida (WAV, FLAC o MP3 a 320kbps).
 5. Haz clic en "Iniciar Separacion".
 
-3. ENSEMBLE NATIVO (FUSIÓN DE MODELOS)
+4. ENSEMBLE NATIVO (FUSIÓN DE MODELOS)
 -------------------------------------------------------------------------------
 Marca la casilla "Ensemble" para seleccionar DOS modelos diferentes. La 
 aplicacion procesara el archivo con ambos y fusionara los resultados.
 - Algoritmo Ensemble: Puedes elegir cómo fusionar las pistas (Media, Min, Max, Median).
 - Recomendado: "avg_wave" (Media) para un sonido mas natural.
 
-4. PRESETS ENSEMBLE EN CADENA (AVANZADOS)
+5. PRESETS ENSEMBLE EN CADENA (AVANZADOS)
 -------------------------------------------------------------------------------
 El menu "Preajustes" permite ejecutar procesos "en cadena" donde la salida 
 de un modelo pasa de forma automatica al siguiente.
@@ -46,47 +54,38 @@ de un modelo pasa de forma automatica al siguiente.
 PRESETS DISPONIBLES:
 - Separacion Vocal: Separa Base/Voz, luego divide las Voces en Lead y Backing.
 - De-Reverb Vocal: Extrae las Voces y luego elimina la reverberacion y el eco.
-- Stems Definitivos (7 Pistas): Extrae Voces e Instrumental, luego divide el 
-  instrumental en 5 partes (Bajo, Bateria, Piano, Guitarra, Otros) y guarda 
-  una pista "_Extra" para residuos.
+- Stems Definitivos: Extrae Voces e Instrumental, luego divide el instrumental 
+  en Bajo, Bateria, Piano, Guitarra y Otros.
 - Ultimate Stems + Drum Split: Igual que el anterior, pero divide la bateria 
-  en Bombo, Caja, Platillos, Toms y mas (mas de 10 pistas en total).
+  en Bombo, Caja, Platillos, Toms, etc. (mas de 10 pistas).
 - Extraccion de Guitarra: Preajuste especializado para aislar guitarras.
 - Separacion Voz Masculina/Femenina: Aisla voces masculinas de femeninas.
-- Restauracion de Vivo: Extrae el ruido del publico, luego limpia el audio 
-  del escenario en Voz e Instrumental.
-- Prep Vocal RVC: Extrae la voz principal (Lead) limpia para covers RVC.
+- Restauracion de Vivo: Extrae ruido del publico y luego limpia el escenario.
+- Prep Vocal RVC: Extrae la voz principal (Lead) limpia para clones RVC.
+- Solo Batería: Aisla exclusivamente la batería, eliminando todos los demás instrumentos.
 
-5. MODELOS PERSONALIZADOS GABOXR67
+6. OPCIONES DE SALIDA Y LIMPIEZA (v1.4)
 -------------------------------------------------------------------------------
-Esta version integra modelos avanzados personalizados por GaboxR67:
-- Instrumental V10: Para pistas instrumentales de alta fidelidad.
-- Experimental Inst_Fv8: Modelo experimental para separaciones quirurgicas.
-- Lead Vocal Dereverb: Especializado en eliminar ecos dificiles de las voces.
-- Last BS Roformer: Modelo equilibrado de alta calidad para uso general.
+- Usar subcarpeta: (Predeterminado) Crea una carpeta con el nombre de la 
+  cancion. Si se desactiva, los archivos se guardan en la carpeta de salida.
+- Eliminar stems silenciosos: Si se activa, el programa borra los stems 
+  generados que esten vacios o muy silenciosos (debajo de -50 dB).
+- Reproducir Stem: Tras la separacion, pulsa este boton para elegir un stem 
+  y escucharlo al instante en el reproductor del sistema.
 
-6. SEGMENTACIÓN (ARCHIVOS LARGOS / PREVENCIÓN DE MEMORIA)
+7. SEGMENTACIÓN (ARCHIVOS LARGOS / PREVENCIÓN DE MEMORIA)
 -------------------------------------------------------------------------------
-Si experimentas errores de memoria (OOM) o cierres con archivos muy largos:
-- Marca "Activar Segmentacion".
-- Selecciona el "Tamaño del Segmento" (ej. 1 min o 2 min).
-- El programa dividira el audio en partes pequeñas, las procesara una a una y 
-  las reensamblara perfectamente al final sin interrupciones.
+Si experimentas errores de memoria (OOM) con archivos muy largos:
+- Marca "Activar Segmentacion" y elige el tamaño (ej. 2 min).
 
-7. PROCESAMIENTO POR LOTES (ARCHIVOS Y CARPETAS)
+8. PROCESAMIENTO POR LOTES (ARCHIVOS Y CARPETAS)
 -------------------------------------------------------------------------------
-Puedes procesar multiples archivos de audio automaticamente:
-- Seleccion Multiple: Haz clic en "Buscar" (archivos) y elige varios a la vez.
-- Seleccion de Carpeta: Haz clic en "Seleccionar Carpeta" para cargar todos 
-  los archivos de audio de un directorio y sus subcarpetas.
-- El programa procesara cada pista secuencialmente.
+Procesa multiples archivos automaticamente arrastrandolos o usando los 
+botones de "Explorar" y "Seleccionar Carpeta".
 
-8. NOTAS TÉCNICAS Y SUFIJOS
+9. NOTAS TÉCNICAS Y SUFIJOS
 -------------------------------------------------------------------------------
 Los archivos de salida tendran sufijos claros como:
 _Vocals, _Instrumental, _Lead, _Backing, _DeReverb, _Other, _Extra, _Drums.
-
-La aplicacion guarda automaticamente tus preferencias (carpeta de salida, 
-modelos, ajustes) para tu proxima sesion.
 
 ===============================================================================

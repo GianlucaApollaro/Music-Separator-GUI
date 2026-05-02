@@ -10,12 +10,14 @@ We are excited to release **Version 1.3** of Music Separator! This update is pac
     - **Guitar Extraction:** A dedicated preset to isolate the guitar track.
     - **Improved Ultimate Stems:** Now includes an `_Extra` stem for residuals and preserves the full `_Instrumental` without being overwritten by the `_Other` stem.
 
-## 🎵 New Models (GaboxR67 Custom)
-Integrated 4 high-quality custom models for professional results:
-- **Instrumental V10:** High-fidelity music extraction.
-- **Inst_Fv8:** Experimental surgical separation.
-- **Lead Vocal Dereverb:** Advanced echo/reverb removal for lead vocals.
-- **Last BS Roformer:** State-of-the-art balanced separation.
+## 🎵 New Models
+A large set of community models has been integrated, available directly from the model dropdown:
+
+- **GaboxR67 Custom** — Instrumental V10, Experimental Inst_Fv8, Lead Vocal Dereverb, Last BS Roformer.
+- **Becruily & RoFormer** — Deux, Guitar, Karaoke (Becruily & Frazer), Vocals, Instrumental, Denoise/Debleed.
+- **Unwa Custom (pcunwa)** — BS-Roformer Large v2, HyperACE v2 (Inst & Voc), Resurrection (+ Inst variant), Big Beta7, Revive (v1/v2/v3e), InstVoc Duality (v1/v2), FNO, Kimmel FT (4 variants).
+- **Sucial De-Reverb/Echo** — Two MelBand Roformer models for dereverb/echo removal (SDR 10.0 and SDR 13.4).
+- **AEmotionStudio Multi-Stem** — BS-Roformer Multistem: 4-stem separation (Vocals, Drums, Bass, Other) in `.safetensors` format.
 
 ## ⚡ Performance & UI Improvements
 - **Smooth Model Downloads:** UI remains responsive during downloads with background processing.

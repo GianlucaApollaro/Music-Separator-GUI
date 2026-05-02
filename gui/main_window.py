@@ -16,6 +16,7 @@ class MainWindow(wx.Frame):
         
         self.worker = None
         self.model_manager = ModelManager()
+        self.last_output_files = []  # paths of last generated stems, for playback
 
         self.InitUI()
         self.InitMenu()
@@ -219,15 +220,21 @@ class MainWindow(wx.Frame):
         self.chk_remove_numbers = wx.CheckBox(self.panel, label=i18n.tr("remove_leading_numbers"))
         self.chk_remove_numbers.SetValue(config.get("remove_leading_numbers", False))
         hbox4.Add(self.chk_remove_numbers, flag=wx.LEFT, border=15)
-        
-        hbox4.AddStretchSpacer(prop=1)
+
+        self.chk_use_subfolder = wx.CheckBox(self.panel, label=i18n.tr("use_subfolder"))
+        self.chk_use_subfolder.SetValue(config.get("use_subfolder", True))
+        hbox4.Add(self.chk_use_subfolder, flag=wx.LEFT, border=15)
+        vbox.Add(hbox4, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
+
+        # --- Output Format ---
+        hbox_format = wx.BoxSizer(wx.HORIZONTAL)
         self.st_format = wx.StaticText(self.panel, label=i18n.tr("output_format"))
-        hbox4.Add(self.st_format, flag=wx.RIGHT|wx.ALIGN_CENTER_VERTICAL, border=10)
+        hbox_format.Add(self.st_format, flag=wx.RIGHT|wx.ALIGN_CENTER_VERTICAL, border=10)
         self.cb_format = wx.ComboBox(self.panel, choices=['WAV', 'FLAC', 'MP3'], style=wx.CB_DROPDOWN | wx.CB_READONLY)
         self.cb_format.SetValue(config.get("output_format", 'WAV'))
-        hbox4.Add(self.cb_format)
+        hbox_format.Add(self.cb_format)
+        vbox.Add(hbox_format, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
 
-        vbox.Add(hbox4, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
 
         # --- Chunk Duration ---
         self.chunk_values = [60, 120, 300, 600, 900, 1200]
@@ -250,6 +257,13 @@ class MainWindow(wx.Frame):
         hbox_chunk.Add(self.cb_chunk, flag=wx.ALIGN_CENTER_VERTICAL)
         vbox.Add(hbox_chunk, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
 
+        # --- Delete Silent Stems checkbox ---
+        hbox_silent = wx.BoxSizer(wx.HORIZONTAL)
+        self.chk_delete_silent = wx.CheckBox(self.panel, label=i18n.tr("delete_silent_stems"))
+        self.chk_delete_silent.SetValue(config.get("delete_silent_stems", False))
+        hbox_silent.Add(self.chk_delete_silent, flag=wx.ALIGN_CENTER_VERTICAL)
+        vbox.Add(hbox_silent, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
+
         # --- Buttons ---
         hbox5 = wx.BoxSizer(wx.HORIZONTAL)
         self.btn_start = wx.Button(self.panel, label=i18n.tr("start_separation"))
@@ -260,6 +274,11 @@ class MainWindow(wx.Frame):
         self.btn_stop.Bind(wx.EVT_BUTTON, self.OnStop)
         self.btn_stop.Disable()
         hbox5.Add(self.btn_stop, flag=wx.LEFT, border=10)
+
+        self.btn_play_stem = wx.Button(self.panel, label=i18n.tr("play_stem"))
+        self.btn_play_stem.Bind(wx.EVT_BUTTON, self.OnPlayStem)
+        self.btn_play_stem.Disable()
+        hbox5.Add(self.btn_play_stem, flag=wx.LEFT, border=10)
         
         vbox.Add(hbox5, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=15)
 
@@ -312,9 +331,11 @@ class MainWindow(wx.Frame):
         if preset_key != "preset_none":
             self.cb_model.Disable()
             self.st3.Disable()
+            self.chk_ensemble.Disable()
         else:
             self.cb_model.Enable()
             self.st3.Enable()
+            self.chk_ensemble.Enable()
 
     def UpdateLabels(self):
         self.SetTitle(i18n.tr("app_title"))
@@ -330,11 +351,14 @@ class MainWindow(wx.Frame):
         self.cb_ens_algo.SetToolTip(i18n.tr("ensemble_algorithm_tooltip"))
         self.chk_gpu.SetLabel(i18n.tr("use_gpu"))
         self.chk_remove_numbers.SetLabel(i18n.tr("remove_leading_numbers"))
+        self.chk_use_subfolder.SetLabel(i18n.tr("use_subfolder"))
+        self.chk_delete_silent.SetLabel(i18n.tr("delete_silent_stems"))
         self.st_format.SetLabel(i18n.tr("output_format"))
         self.chk_chunk.SetLabel(i18n.tr("chunk_enable"))
         self.st_chunk_dur.SetLabel(i18n.tr("chunk_duration_label"))
         self.btn_start.SetLabel(i18n.tr("start_separation"))
         self.btn_stop.SetLabel(i18n.tr("stop"))
+        self.btn_play_stem.SetLabel(i18n.tr("play_stem"))
         self.st_log.SetLabel(i18n.tr("logs"))
         
         self.cb_model.SetToolTip(i18n.tr("model_tooltip"))
@@ -409,6 +433,10 @@ class MainWindow(wx.Frame):
         self.btn_start.Enable()
         self.btn_stop.Disable()
         self.gauge.SetValue(100)
+        # Store output files and enable Play button if we have results
+        if event.output_files:
+            self.last_output_files = event.output_files
+            self.btn_play_stem.Enable()
         if event.success:
             wx.MessageBox(i18n.tr("msg_success"), i18n.tr("msg_success_title"), wx.OK | wx.ICON_INFORMATION)
         else:
@@ -433,6 +461,8 @@ class MainWindow(wx.Frame):
         config.set("enable_ensemble", self.chk_ensemble.GetValue())
         config.set("output_format", self.cb_format.GetValue())
         config.set("remove_leading_numbers", self.chk_remove_numbers.GetValue())
+        config.set("use_subfolder", self.chk_use_subfolder.GetValue())
+        config.set("delete_silent_stems", self.chk_delete_silent.GetValue())
         config.set("chunk_enable", self.chk_chunk.GetValue())
         config.set("chunk_size_idx", self.cb_chunk.GetSelection())
 
@@ -475,6 +505,8 @@ class MainWindow(wx.Frame):
         model_name_2 = self.cb_model_2.GetValue()
         ensemble_algorithm = self.cb_ens_algo.GetValue()
         remove_leading_numbers = self.chk_remove_numbers.GetValue()
+        use_subfolder = self.chk_use_subfolder.GetValue()
+        delete_silent_stems = self.chk_delete_silent.GetValue()
 
         # Thread-safe callbacks
         def logger_cb(msg):
@@ -496,10 +528,13 @@ class MainWindow(wx.Frame):
                 if not m1:
                     _abort()
                     return
-                m2 = self.model_manager.resolve_and_download(preset_config["model_2"], logger_cb, progress_cb)
-                if not m2:
-                    _abort()
-                    return
+                m2 = None
+                if "model_2" in preset_config:
+                    m2 = self.model_manager.resolve_and_download(preset_config["model_2"], logger_cb, progress_cb)
+                    if not m2:
+                        _abort()
+                        return
+                
                 m3 = None
                 if "model_3" in preset_config:
                     m3 = self.model_manager.resolve_and_download(preset_config["model_3"], logger_cb, progress_cb)
@@ -511,7 +546,9 @@ class MainWindow(wx.Frame):
                     self.worker = SeparationThread(
                         self, input_files, output_dir, m1, use_gpu, out_format,
                         m2, m3, preset_config, chunk_duration=chunk_duration,
-                        remove_leading_numbers=remove_leading_numbers
+                        remove_leading_numbers=remove_leading_numbers,
+                        use_subfolder=use_subfolder,
+                        delete_silent_stems=delete_silent_stems
                     )
                     self.worker.start()
                 wx.CallAfter(_start_preset)
@@ -536,7 +573,9 @@ class MainWindow(wx.Frame):
                 self.worker = SeparationThread(
                     self, input_files, output_dir, m1, use_gpu, out_format,
                     m2, ensemble_algorithm=algo, chunk_duration=chunk_duration,
-                    remove_leading_numbers=remove_leading_numbers
+                    remove_leading_numbers=remove_leading_numbers,
+                    use_subfolder=use_subfolder,
+                    delete_silent_stems=delete_silent_stems
                 )
                 self.worker.start()
             wx.CallAfter(_start_standard)
@@ -547,6 +586,36 @@ class MainWindow(wx.Frame):
         if self.worker:
             self.worker.stop()
             self.tc_log.AppendText(i18n.tr("msg_stopping") + "\n")
+
+    def OnPlayStem(self, event):
+        if not self.last_output_files:
+            wx.MessageBox(i18n.tr("stem_play_no_files"), i18n.tr("play_stem"), wx.OK | wx.ICON_INFORMATION)
+            return
+        # Show only basenames in the dialog, keep a map to full paths
+        display_names = [os.path.basename(p) for p in self.last_output_files]
+        dlg = wx.SingleChoiceDialog(
+            self,
+            i18n.tr("stem_play_dialog_title"),
+            i18n.tr("play_stem"),
+            display_names
+        )
+        if dlg.ShowModal() == wx.ID_OK:
+            idx = dlg.GetSelection()
+            full_path = self.last_output_files[idx]
+            try:
+                import sys
+                if sys.platform == 'darwin':
+                    import subprocess
+                    subprocess.Popen(['open', full_path])
+                elif sys.platform == 'win32':
+                    os.startfile(full_path)
+                else:
+                    import subprocess
+                    subprocess.Popen(['xdg-open', full_path])
+            except Exception as e:
+                wx.MessageBox(str(e), i18n.tr("msg_error_title"), wx.OK | wx.ICON_ERROR)
+        dlg.Destroy()
+
     def _check_ffmpeg(self):
         import shutil
         if not shutil.which('ffmpeg'):

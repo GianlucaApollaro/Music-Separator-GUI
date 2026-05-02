@@ -1,6 +1,6 @@
 ===============================================================================
                        MUSIC SEPARATOR - MANUALE UTENTE                       
-                       MANUALE ITALIANO (IT) - v1.3
+                       MANUALE ITALIANO (IT) - v1.4
 ===============================================================================
 
 Benvenuto in Music separator, un potente strumento per la separazione audio 
@@ -11,34 +11,43 @@ elementi specifici con qualita' da studio di registrazione.
 1. INSTALLAZIONE
 -------------------------------------------------------------------------------
 WINDOWS:
-- Avvia 'install.bat' per creare l'ambiente virtuale e installare le dipendenze.
-- Usa 'run.bat' per lanciare l'applicazione.
-- Se non hai una scheda video NVIDIA dedicata, usa 'install_cpu.bat' e 'run_Cpu.bat'.
+- Se hai scaricato la versione precompilata, avvia direttamente 'Music separator.exe'.
+- Se installi da sorgente:
+  - Avvia 'install.bat' per creare l'ambiente virtuale e installare le dipendenze.
+  - Usa 'run.bat' per lanciare l'applicazione.
+  - Se non hai una scheda video NVIDIA dedicata, usa 'install_cpu.bat' e 'run_Cpu.bat'.
 
 macOS (Apple Silicon M1/M2/M3/M4):
-- Assicurati di avere gli strumenti essenziali di Xcode: 
-  apri il Terminale ed esegui 'xcode-select --install'
-- Fai clic destro e scegli 'Apri' sul file 'install_mac.command'.
-- Usa 'run_mac.command' per lanciare il programma.
-- NOTA: Da questa versione (v1.3), i binari di FFmpeg sono inclusi nel pacchetto 
-  per Mac, quindi non e' piu' strettamente necessario installarli tramite Homebrew.
+- Estrai il file .zip e sposta la cartella in /Applications. 
+- Fai clic destro su 'Music separator.app' e scegli 'Apri'.
+- NOTA: FFmpeg e' incluso nel pacchetto. Se riscontri problemi di permessi, 
+  consulta il README per le istruzioni su 'xattr'.
 
-2. USO BASE (SINGOLO MODELLO)
+2. PRE-PROCESSAMENTO AUTOMATICO (NOVITA' v1.4)
 -------------------------------------------------------------------------------
-1. Seleziona il tuo file audio di input (WAV, FLAC, MP3, ecc.).
+Music separator ora prepara automaticamente l'audio per ottenere i migliori 
+risultati possibili dai modelli:
+- Normalizzazione: Tutto l'audio viene normalizzato al picco di -0.1 dBFS prima 
+  della separazione, garantendo un volume ottimale senza distorsioni.
+- Downmix Stereo: Se carichi file multicanale (es. 5.1 o 7.1), il programma li 
+  converte automaticamente in stereo prima di passarli ai modelli IA.
+
+3. USO BASE (SINGOLO MODELLO)
+-------------------------------------------------------------------------------
+1. Seleziona il tuo file audio di input (WAV, FLAC, MP3, MP4, MKV, ecc.).
 2. Scegli una Cartella di Output.
 3. Seleziona un Modello dal menu a tendina (divisi per categoria: Voci, ecc.).
 4. Seleziona il formato di uscita (WAV, FLAC o MP3 a 320kbps).
 5. Clicca su "Avvia Separazione".
 
-3. ENSEMBLE NATIVO (MIX DI MODELLI)
+4. ENSEMBLE NATIVO (MIX DI MODELLI)
 -------------------------------------------------------------------------------
 Spunta la casella "Abilita Ensemble" per scegliere DUE modelli differenti. 
 L'applicazione elaborera' il file con entrambi e fondera' i risultati.
 - Algoritmo Ensemble: Puoi scegliere come fondere le tracce (Media, Min, Max, Median).
 - Consigliato: "avg_wave" (Media) per la massima naturalezza.
 
-4. PRESET ENSEMBLE A CATENA (AVANZATO)
+5. PRESET ENSEMBLE A CATENA (AVANZATO)
 -------------------------------------------------------------------------------
 Il menu a tendina "Preset" ti permette di eseguire processi "a catena", dove 
 l'output di un modello viene automaticamente passato a un altro.
@@ -55,37 +64,31 @@ PRESET DISPONIBILI:
 - Restauro Live: Estrae il rumore del pubblico (Applausi), poi pulisce il 
   restante audio del palco in Voce e Strumentale.
 - Prep Vocale RVC: Estrae la voce Lead pulita per clonazione vocale tramite RVC.
+- Solo Batteria: Isola esclusivamente le batterie, eliminando tutti gli altri strumenti.
 
-5. MODELLI CUSTOM GABOXR67
+6. OPZIONI DI OUTPUT E PULIZIA (v1.4)
 -------------------------------------------------------------------------------
-In questa versione sono stati integrati i modelli avanzati di GaboxR67:
-- Instrumental V10: Per basi strumentali di altissima fedelta'.
-- Experimental Inst_Fv8: Modello sperimentale per separazioni chirurgiche.
-- Lead Vocal Dereverb: Specializzato nel rimuovere riverberi difficili dalle voci.
-- Last BS Roformer: Modello bilanciato per separazione generale di alta qualita'.
+- Usa sottocartella: (Predefinito) Crea una cartella col nome del brano. Se 
+  disattivato, i file verranno messi liberi nella cartella di output.
+- Elimina stem silenziosi: Se attivo, il programma controlla se gli stem 
+  generati sono vuoti o molto silenziosi (sotto -50 dB) e li elimina per 
+  tenere pulita la cartella.
+- Ascolta Stem: Dopo la separazione, clicca su questo pulsante per scegliere 
+  uno degli stem appena creati e ascoltarlo istantaneamente nel player di sistema.
 
-6. CHUNKING (FILE LUNGHI / PREVENZIONE OUT-OF-MEMORY)
+7. CHUNKING (FILE LUNGHI / PREVENZIONE OUT-OF-MEMORY)
 -------------------------------------------------------------------------------
-Se riscontri crash con file molto lunghi (>10 min) o hai poca memoria video:
-- Spunta "Abilita Chunking".
-- Seleziona la "Dimensione Chunk" (es. 1 min o 2 min).
-- Il programma dividerà l'audio in piccoli pezzi, li elaborerà uno alla volta e 
-  li riassemblerà perfettamente alla fine senza interruzioni.
+Se riscontri crash con file molto lunghi o hai poca memoria video:
+- Spunta "Abilita Chunking" e seleziona la dimensione (es. 2 min).
 
-7. ELABORAZIONE IN BATCH (MULTI-FILE E CARTELLE)
+8. ELABORAZIONE IN BATCH (MULTI-FILE E CARTELLE)
 -------------------------------------------------------------------------------
-Puoi elaborare molteplici file audio automaticamente:
-- Selezione Multipla: Clicca su "Sfoglia" (file) e seleziona più file insieme.
-- Selezione Cartella: Clicca su "Seleziona Cartella" per caricare istantaneamente 
-  tutti i file audio contenuti in una directory e nelle sue sottocartelle.
-- Il programma eseguirà tutta l'elaborazione in sequenza su ciascun brano.
+Puoi elaborare molteplici file audio automaticamente trascinandoli o usando i 
+pulsanti "Sfoglia" e "Seleziona Cartella".
 
-8. NOTE TECNICHE E SUFFISSI
+9. NOTE TECNICHE E SUFFISSI
 -------------------------------------------------------------------------------
 I file di output avranno nomi chiari come:
 _Vocals, _Instrumental, _Lead, _Backing, _DeReverb, _Other, _Extra, _Drums.
-
-L'app salva automaticamente le tue preferenze (cartella output, modelli, 
-impostazioni) per la sessione successiva.
 
 ===============================================================================

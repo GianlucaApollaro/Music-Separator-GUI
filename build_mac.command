@@ -47,6 +47,7 @@ pyinstaller --windowed \
     --hidden-import=neuralop \
     --hidden-import=neuralop.models \
     --hidden-import=neuralop.models.fno \
+    --hidden-import=einops \
     --collect-all wx \
     --collect-all audio_separator \
     --collect-all neuralop \

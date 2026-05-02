@@ -1,6 +1,6 @@
 ===============================================================================
                        MUSIC SEPARATOR - USER MANUAL                       
-                       ENGLISH MANUAL (EN) - v1.3
+                       ENGLISH MANUAL (EN) - v1.4
 ===============================================================================
 
 Welcome to Music separator, a powerful AI-driven audio separation tool based on 
@@ -10,34 +10,42 @@ you to isolate vocals, instruments, and specific elements with studio quality.
 1. INSTALLATION
 -------------------------------------------------------------------------------
 WINDOWS:
-- Run 'install.bat' to create the environment and install dependencies.
-- Use 'run.bat' to launch the application.
-- If you don't have an NVIDIA GPU, use 'install_cpu.bat' and 'run_Cpu.bat'.
+- If you downloaded the precompiled version, launch 'Music separator.exe' directly.
+- If installing from source:
+  - Run 'install.bat' to create the virtual environment and install dependencies.
+  - Use 'run.bat' to launch the application.
+  - If you don't have an NVIDIA GPU, use 'install_cpu.bat' and 'run_Cpu.bat'.
 
 macOS (Apple Silicon M1/M2/M3/M4):
-- Ensure you have the Xcode command line tools installed: 
-  open Terminal and run 'xcode-select --install'
-- Right-click and 'Open' the 'install_mac.command' file.
-- Use 'run_mac.command' to launch the app.
-- NOTE: As of v1.3, FFmpeg binaries are included in the Mac package, so 
-  installing them via Homebrew is no longer strictly required.
+- Extract the .zip file and move the folder to /Applications.
+- Right-click 'Music separator.app' and choose 'Open'.
+- NOTE: FFmpeg is included in the package. If you face permission issues, 
+  refer to the README for 'xattr' instructions.
 
-2. BASIC USAGE (SINGLE MODEL)
+2. AUTOMATIC PRE-PROCESSING (NEW in v1.4)
 -------------------------------------------------------------------------------
-1. Select your input audio file (WAV, FLAC, MP3, etc.).
+Music separator now automatically prepares your audio for the best AI results:
+- Normalization: All input audio is normalized to a -0.1 dBFS peak before 
+  separation, ensuring optimal volume without clipping.
+- Stereo Downmix: Multi-channel files (e.g., 5.1 or 7.1) are automatically 
+  downmixed to stereo before being processed by the AI models.
+
+3. BASIC USAGE (SINGLE MODEL)
+-------------------------------------------------------------------------------
+1. Select your input file (WAV, FLAC, MP3, MP4, MKV, etc.).
 2. Choose an Output Directory.
-3. Select a Model from the dropdown (categorized by type: Vocals, Drums, etc.).
+3. Select a Model from the dropdown (categorized by type: Vocals, etc.).
 4. Select the output format (WAV, FLAC, or MP3 at 320kbps).
 5. Click "Start Separation".
 
-3. NATIVE ENSEMBLE (MIXING MODELS)
+4. NATIVE ENSEMBLE (MIXING MODELS)
 -------------------------------------------------------------------------------
 Tick the "Ensemble" checkbox to select TWO different models. The application 
 will process the file with both and fuse the results.
-- Ensemble Algorithm: You can choose how to mix the tracks (Average, Min, Max, Median).
+- Ensemble Algorithm: Choose how to mix the tracks (Average, Min, Max, Median).
 - Recommended: "avg_wave" (Average) for the most natural sound.
 
-4. CHAINED ENSEMBLE PRESETS (ADVANCED)
+5. CHAINED ENSEMBLE PRESETS (ADVANCED)
 -------------------------------------------------------------------------------
 The "Preset" dropdown allows you to run "Chained" processes where the output 
 of one model is automatically fed into another.
@@ -45,47 +53,38 @@ of one model is automatically fed into another.
 AVAILABLE PRESETS:
 - Vocal Split: Separates Vocals/Inst, then splits Vocals into Lead and Backing.
 - Vocal De-Reverb: Separates Vocals, then removes reverb/echo from the voice.
-- Ultimate Stems (7 Tracks): Extracts high-quality Vocals and Instrumental, 
-  then splits the instrumental into 5 parts (Bass, Drums, Piano, Guitar, Other) 
-  and also saves an "_Extra" stem for residuals.
-- Ultimate Stems + Drum Split: Same as above, but further splits the drums 
-  into Kick, Snare, Cymbals, Toms, and more (10+ total tracks).
+- Ultimate Stems (7 Tracks): High-quality Vocals and Instrumental extraction, 
+  then splits Instrumental into Bass, Drums, Piano, Guitar, and Other.
+- Ultimate Stems + Drum Split: Same as above, but further splits drums into 
+  Kick, Snare, Cymbals, Toms, etc. (10+ tracks total).
 - Guitar Extraction: Specialized preset to isolate guitars from the track.
 - Male/Female Split: Specifically isolates male vs. female voices.
-- Live Restore: Extracts the Crowd/Applause, then cleans the remaining stage 
-  audio into Vocals and Instrumental.
-- RVC Vocal Prep: Extracts the clean Lead vocal for Voice Cloning via RVC.
+- Live Restore: Extracts Crowd/Applause, then cleans the remaining audio.
+- RVC Vocal Prep: Extracts clean Lead vocals for RVC voice cloning.
+- Only Drums: Isolates only the drum kit, removing all other instruments.
 
-5. GABOXR67 CUSTOM MODELS
+6. OUTPUT OPTIONS AND CLEANUP (v1.4)
 -------------------------------------------------------------------------------
-This version integrates advanced custom models by GaboxR67:
-- Instrumental V10: For high-fidelity instrumental tracks.
-- Experimental Inst_Fv8: Experimental model for surgical separations.
-- Lead Vocal Dereverb: Specialized in removing difficult reverb from vocals.
-- Last BS Roformer: Balanced high-quality model for general separation.
+- Save in subfolder: (Default) Creates a folder named after the song. If 
+  disabled, files are saved directly in the output directory.
+- Delete silent stems: If enabled, the program checks if generated stems are 
+  empty or very silent (below -50 dB) and deletes them to keep folders clean.
+- Play Stem: After separation, click this button to choose a generated stem 
+   and listen to it instantly in your system player.
 
-6. CHUNKING (LONG FILES / OUT-OF-MEMORY PREVENTION)
+7. CHUNKING (LONG FILES / OUT-OF-MEMORY PREVENTION)
 -------------------------------------------------------------------------------
-If you experience Out-of-Memory (OOM) errors or crashes with long audio files:
-- Check "Enable Chunking".
-- Select the "Chunk Size" (e.g., 1 min or 2 min).
-- The program will split the audio into small chunks, process them one by one, 
-  and perfectly reassemble them at the end without interruptions.
+If you experience crashes with long files or have low VRAM:
+- Check "Enable Chunking" and select a size (e.g., 2 min).
 
-7. BATCH PROCESSING (FILES AND FOLDERS)
+8. BATCH PROCESSING (FILES AND FOLDERS)
 -------------------------------------------------------------------------------
-You can process multiple audio files automatically:
-- Multi-Select: Click "Browse" (files) and select multiple files at once.
-- Folder Select: Click "Browse Folder" to instantly load all audio files 
-  contained in a directory and its subdirectories.
-- The program will run the full process sequentially on each track.
+Process multiple files automatically by dragging them or using the "Browse" 
+and "Browse Folder" buttons.
 
-8. TECHNICAL NOTES AND SUFFIXES
+9. TECHNICAL NOTES AND SUFFIXES
 -------------------------------------------------------------------------------
 Output files will have clear suffixes such as:
 _Vocals, _Instrumental, _Lead, _Backing, _DeReverb, _Other, _Extra, _Drums.
-
-The app automatically saves your preferences (output folder, models, 
-settings) for your next session.
 
 ===============================================================================

@@ -9,6 +9,7 @@ class PresetManager:
         "preset_guitar_specialist",
         "preset_crowd_live",
         "preset_vocal_rvc",
+        "preset_only_drums",
     ]
 
     presets_config = {
@@ -54,7 +55,7 @@ class PresetManager:
         },
         "preset_chorus_hq": {
             "type": "chain",
-            "model_1": "mel_band_roformer_kim_ft_unwa.ckpt",
+            "model_1": "mel_band_roformer_becruily_deux.ckpt",
             "model_2": "bs_roformer_male_female_by_aufr33_sdr_7.2889.ckpt",
             "pass_stem": "vocals",
             "m1_keep_name": "_Instrumental",
@@ -126,6 +127,13 @@ class PresetManager:
             "m2_rename_map": {
                 "noreverb": "_Lead_Clean",
                 "reverb": "_Lead_Reverb"
+            }
+        },
+        "preset_only_drums": {
+            "type": "single",
+            "model_1": "BS-Roformer-SW.ckpt",
+            "rename_map": {
+                "drums": "_Drums"
             }
         },
     }

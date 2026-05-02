@@ -18,8 +18,10 @@ class LogEvent(wx.PyEvent):
         self.message = message
 
 class DoneEvent(wx.PyEvent):
-    def __init__(self, success, message=""):
+    def __init__(self, success, message="", output_files=None):
         super().__init__()
         self.SetEventType(EVT_DONE_ID)
         self.success = success
         self.message = message
+        self.output_files = output_files or []  # list of absolute paths
+

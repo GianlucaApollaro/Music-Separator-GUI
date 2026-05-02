@@ -44,6 +44,7 @@
     "preset_chorus_hq": "Male/Female Voice Split (Instrumental + Male/Female)",
     "preset_crowd_live": "Live Restore (Crowd + Vocal + Inst)",
     "preset_vocal_rvc": "RVC Vocal Prep (Lead Clean + Reverb + Instrumental/BVs)",
+    "preset_only_drums": "Only Drums (Extraction of drums only)",
     "preset_guitar_specialist": "Guitar Extraction (3 Stems)",
     "ensemble_algorithm": "Ensemble Algorithm:",
     "ensemble_algorithm_tooltip": "Algorithm used to fuse the two models' outputs",
@@ -64,5 +65,12 @@
     "ffmpeg_not_found": "FFmpeg was not found on your system. Format conversion and some separation features may not work.",
     "confirm_exit_during_processing": "A separation process is currently running. Are you sure you want to exit and stop the process?",
     "warning": "Warning",
-    "confirm": "Confirm"
-}
+    "confirm": "Confirm",
+    "use_subfolder": "Save stems in a subfolder named after the source file",
+    "delete_silent_stems": "Delete silent output stems (below -50 dB)",
+    "play_stem": "Play Stem",
+    "stem_play_dialog_title": "Play a generated stem",
+    "stem_play_no_files": "No output files available. Run a separation first.",
+    "status_silent_stem_deleted": "Deleted silent stem: {file}",
+    "status_normalizing": "Normalizing input audio to -0.1 dBFS..."
+}

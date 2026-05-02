@@ -62,7 +62,7 @@ class GuiLogHandler(logging.Handler):
             raise KeyboardInterrupt("Stopped by user")
 
 class SeparationThread(threading.Thread):
-    def __init__(self, parent, input_files, output_dir, model_name, use_gpu=True, output_format="WAV", model_name_2=None, model_name_3=None, preset_config=None, ensemble_algorithm="avg_wave", chunk_duration=None, remove_leading_numbers=False):
+    def __init__(self, parent, input_files, output_dir, model_name, use_gpu=True, output_format="WAV", model_name_2=None, model_name_3=None, preset_config=None, ensemble_algorithm="avg_wave", chunk_duration=None, remove_leading_numbers=False, use_subfolder=True, delete_silent_stems=False):
         super().__init__()
         self.parent = parent
         self.input_files = input_files
@@ -76,7 +76,10 @@ class SeparationThread(threading.Thread):
         self.ensemble_algorithm = ensemble_algorithm
         self.chunk_duration = chunk_duration
         self.remove_leading_numbers = remove_leading_numbers
+        self.use_subfolder = use_subfolder
+        self.delete_silent_stems = delete_silent_stems
         self._stop_event = threading.Event()
+        self.all_output_files = []  # accumulates absolute paths of all generated stems
 
     def run(self):
         try:
@@ -594,18 +597,44 @@ class SeparationThread(threading.Thread):
                 self.post_log(f"File: {current_input_file}")
                 
                 # --- Create a safe ASCII file path for processing to bypass FFmpeg/AudioSeparator unicode issues ---
-                # We also convert to WAV to ensure the internal engine perfectly recognizes the format (fixes M4A issues)
+                # We also convert to WAV, downmix to stereo (-ac 2), and strip video streams (-vn).
                 safe_base = f"audio_in_{uuid.uuid4().hex[:8]}"
                 safe_input_file = os.path.join(tempfile.gettempdir(), f"{safe_base}.wav")
                 
                 try:
-                    # Attempt robust conversion to WAV
-                    subprocess.run(['ffmpeg', '-y', '-i', current_input_file, '-vn', safe_input_file], check=True, capture_output=True)
+                    # -ac 2: downmix any multi-channel audio (e.g. 5.1) to stereo; no effect if already stereo/mono
+                    subprocess.run(
+                        ['ffmpeg', '-y', '-i', current_input_file, '-vn', '-ac', '2', safe_input_file],
+                        check=True, capture_output=True
+                    )
                 except Exception as e:
                     self.post_log(f"FFmpeg conversion notice: {e}. Falling back to direct copy.")
                     _, input_ext = os.path.splitext(current_input_file)
                     safe_input_file = os.path.join(tempfile.gettempdir(), f"{safe_base}{input_ext}")
                     shutil.copy2(current_input_file, safe_input_file)
+
+                # --- Peak normalization to -0.1 dBFS ---
+                # Step 1: detect current peak with volumedetect
+                try:
+                    self.post_log(i18n.tr("status_normalizing"))
+                    vol_result = subprocess.run(
+                        ['ffmpeg', '-y', '-i', safe_input_file, '-af', 'volumedetect', '-f', 'null',
+                         os.devnull if os.name != 'nt' else 'NUL'],
+                        capture_output=True, text=True
+                    )
+                    peak_match = re.search(r'max_volume:\s*([-\d.]+)\s*dB', vol_result.stderr)
+                    if peak_match:
+                        max_vol_db = float(peak_match.group(1))
+                        gain_db = -0.1 - max_vol_db  # gain needed to bring peak to -0.1 dBFS
+                        if abs(gain_db) > 0.01:  # skip if already within 0.01 dB of target
+                            norm_file = os.path.join(tempfile.gettempdir(), f"{safe_base}_norm.wav")
+                            subprocess.run(
+                                ['ffmpeg', '-y', '-i', safe_input_file, '-af', f'volume={gain_db:.4f}dB', norm_file],
+                                check=True, capture_output=True
+                            )
+                            os.replace(norm_file, safe_input_file)
+                except Exception as norm_err:
+                    self.post_log(f"Normalization skipped: {norm_err}")
 
                 base_input_name = os.path.splitext(os.path.basename(current_input_file))[0]
 
@@ -614,15 +643,55 @@ class SeparationThread(threading.Thread):
                 if self.remove_leading_numbers:
                     folder_name = re.sub(r"^\d+[\s.\-_]+", "", base_input_name)
 
-                # Create a dedicated output subfolder named after the input file
-                file_output_dir = os.path.join(self.output_dir, folder_name)
-                os.makedirs(file_output_dir, exist_ok=True)
+                # Output directory: dedicated subfolder (default) or flat into output_dir
+                if self.use_subfolder:
+                    file_output_dir = os.path.join(self.output_dir, folder_name)
+                    os.makedirs(file_output_dir, exist_ok=True)
+                else:
+                    file_output_dir = self.output_dir
                 separator.output_dir = file_output_dir
 
                 if self.preset_config:
                     preset_type = self.preset_config.get("type", "chain")
 
-                    if preset_type == "ensemble":
+                    if preset_type == "single":
+                        # ====== PRESET SINGLE MODEL (Filter/Rename Stems) ======
+                        from gui.audio_utils import stem_from_filename
+                        self.post_log(i18n.tr("status_loading"))
+                        separator.load_model(model_filename=self.preset_config["model_1"])
+                        self.post_log(i18n.tr("status_starting", file=os.path.basename(current_input_file)))
+                        
+                        old_stderr = sys.stderr
+                        sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
+                        try:
+                            m1_outputs = separator.separate(safe_input_file)
+                        finally:
+                            sys.stderr = old_stderr
+                        
+                        final_outputs = []
+                        rename_map = self.preset_config.get("rename_map", {})
+                        
+                        for f in m1_outputs:
+                            stem = stem_from_filename(f)
+                            clean_ext = os.path.splitext(f)[1]
+                            old_path = os.path.join(file_output_dir, f)
+                            
+                            if stem in rename_map:
+                                new_name = f"{rename_map[stem].lstrip('_')}{clean_ext}"
+                                new_path = os.path.join(file_output_dir, new_name)
+                                if os.path.exists(new_path):
+                                    os.remove(new_path)
+                                os.rename(old_path, new_path)
+                                final_outputs.append(new_name)
+                            else:
+                                # Delete unwanted stems
+                                if os.path.exists(old_path):
+                                    os.remove(old_path)
+                        
+                        output_files = final_outputs
+
+                    elif preset_type == "ensemble":
+
                         # ====== PRESET ENSEMBLE (2-Pass + Local Mixing) ======
                         import soundfile as sf
                         import numpy as np
@@ -947,10 +1016,41 @@ class SeparationThread(threading.Thread):
                         os.remove(safe_input_file)
                     except Exception:
                         pass
-            
+
+                # --- Silent stem detection and optional deletion ---
+                if self.delete_silent_stems and output_files:
+                    surviving = []
+                    for fname in output_files:
+                        fpath = os.path.join(file_output_dir, fname)
+                        if not os.path.exists(fpath):
+                            surviving.append(fname)
+                            continue
+                        try:
+                            vol_res = subprocess.run(
+                                ['ffmpeg', '-y', '-i', fpath, '-af', 'volumedetect', '-f', 'null',
+                                 os.devnull if os.name != 'nt' else 'NUL'],
+                                capture_output=True, text=True
+                            )
+                            peak_m = re.search(r'max_volume:\s*([-\d.]+)\s*dB', vol_res.stderr)
+                            if peak_m and float(peak_m.group(1)) < -50.0:
+                                os.remove(fpath)
+                                self.post_log(i18n.tr("status_silent_stem_deleted", file=fname))
+                            else:
+                                surviving.append(fname)
+                                self.all_output_files.append(fpath)
+                        except Exception:
+                            surviving.append(fname)
+                            self.all_output_files.append(fpath)
+                    output_files = surviving
+                else:
+                    for fname in output_files:
+                        fpath = os.path.join(file_output_dir, fname)
+                        if os.path.exists(fpath):
+                            self.all_output_files.append(fpath)
+
             self.post_progress(100)
             self.post_log(i18n.tr("status_complete", files=output_files))
-            wx.PostEvent(self.parent, DoneEvent(True, i18n.tr("msg_success")))
+            wx.PostEvent(self.parent, DoneEvent(True, i18n.tr("msg_success"), output_files=self.all_output_files))
 
         except Exception as e:
             import traceback

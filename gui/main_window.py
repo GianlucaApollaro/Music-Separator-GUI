@@ -197,36 +197,57 @@ class MainWindow(wx.Frame):
         self.hbox_preset.Add(self.cb_preset, proportion=1, flag=wx.EXPAND)
         vbox.Add(self.hbox_preset, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
 
-        # --- Options ---
+        # --- Row 4: Processing Options (GPU & Chunking) ---
         hbox4 = wx.BoxSizer(wx.HORIZONTAL)
         self.chk_gpu = wx.CheckBox(self.panel, label=i18n.tr("use_gpu"))
         
-        # Check GPU availability: CUDA (Windows/Linux) or MPS (Apple Silicon)
+        # Check GPU availability
         import torch
         has_cuda = torch.cuda.is_available()
         has_mps = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
         has_gpu = has_cuda or has_mps
         if has_gpu:
             self.chk_gpu.SetValue(True)
-            if has_mps and not has_cuda:
-                self.chk_gpu.SetToolTip(i18n.tr("gpu_mps_tooltip"))
         else:
             self.chk_gpu.SetValue(False)
             self.chk_gpu.Disable()
-            self.chk_gpu.SetToolTip(i18n.tr("gpu_not_available_tooltip"))
             
         hbox4.Add(self.chk_gpu)
 
+        self.chk_chunk = wx.CheckBox(self.panel, label=i18n.tr("chunk_enable"))
+        self.chk_chunk.SetValue(config.get("chunk_enable", False))
+        self.chk_chunk.Bind(wx.EVT_CHECKBOX, self.OnChunkCheck)
+        hbox4.Add(self.chk_chunk, flag=wx.LEFT, border=15)
+
+        hbox4.AddStretchSpacer(prop=1)
+        self.st_chunk_dur = wx.StaticText(self.panel, label=i18n.tr("chunk_duration_label"))
+        hbox4.Add(self.st_chunk_dur, flag=wx.RIGHT|wx.ALIGN_CENTER_VERTICAL, border=8)
+        self.chunk_values = [60, 120, 300, 600, 900, 1200]
+        self.chunk_choices = ["1 min", "2 min", "5 min", "10 min", "15 min", "20 min"]
+        self.cb_chunk = wx.ComboBox(self.panel, choices=self.chunk_choices, style=wx.CB_DROPDOWN | wx.CB_READONLY, size=(90, -1))
+        self.cb_chunk.SetSelection(config.get("chunk_size_idx", 0))
+        if not self.chk_chunk.GetValue():
+            self.st_chunk_dur.Disable()
+            self.cb_chunk.Disable()
+        hbox4.Add(self.cb_chunk, flag=wx.ALIGN_CENTER_VERTICAL)
+        vbox.Add(hbox4, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
+
+        # --- Row 5: File & Folder Options ---
+        hbox_files = wx.BoxSizer(wx.HORIZONTAL)
         self.chk_remove_numbers = wx.CheckBox(self.panel, label=i18n.tr("remove_leading_numbers"))
         self.chk_remove_numbers.SetValue(config.get("remove_leading_numbers", False))
-        hbox4.Add(self.chk_remove_numbers, flag=wx.LEFT, border=15)
+        hbox_files.Add(self.chk_remove_numbers)
 
         self.chk_use_subfolder = wx.CheckBox(self.panel, label=i18n.tr("use_subfolder"))
         self.chk_use_subfolder.SetValue(config.get("use_subfolder", True))
-        hbox4.Add(self.chk_use_subfolder, flag=wx.LEFT, border=15)
-        vbox.Add(hbox4, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
+        hbox_files.Add(self.chk_use_subfolder, flag=wx.LEFT, border=15)
 
-        # --- Output Format ---
+        self.chk_delete_silent = wx.CheckBox(self.panel, label=i18n.tr("delete_silent_stems"))
+        self.chk_delete_silent.SetValue(config.get("delete_silent_stems", False))
+        hbox_files.Add(self.chk_delete_silent, flag=wx.LEFT, border=15)
+        vbox.Add(hbox_files, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
+
+        # --- Row 6: Output Format ---
         hbox_format = wx.BoxSizer(wx.HORIZONTAL)
         self.st_format = wx.StaticText(self.panel, label=i18n.tr("output_format"))
         hbox_format.Add(self.st_format, flag=wx.RIGHT|wx.ALIGN_CENTER_VERTICAL, border=10)
@@ -235,34 +256,6 @@ class MainWindow(wx.Frame):
         hbox_format.Add(self.cb_format)
         vbox.Add(hbox_format, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
 
-
-        # --- Chunk Duration ---
-        self.chunk_values = [60, 120, 300, 600, 900, 1200]
-        self.chunk_choices = ["1 min", "2 min", "5 min", "10 min", "15 min", "20 min"]
-        hbox_chunk = wx.BoxSizer(wx.HORIZONTAL)
-        self.chk_chunk = wx.CheckBox(self.panel, label=i18n.tr("chunk_enable"))
-        self.chk_chunk.SetValue(config.get("chunk_enable", False))
-        self.chk_chunk.Bind(wx.EVT_CHECKBOX, self.OnChunkCheck)
-        hbox_chunk.Add(self.chk_chunk, flag=wx.ALIGN_CENTER_VERTICAL)
-        hbox_chunk.AddStretchSpacer(prop=1)
-        self.st_chunk_dur = wx.StaticText(self.panel, label=i18n.tr("chunk_duration_label"))
-        hbox_chunk.Add(self.st_chunk_dur, flag=wx.RIGHT|wx.ALIGN_CENTER_VERTICAL, border=8)
-        self.cb_chunk = wx.ComboBox(self.panel, choices=self.chunk_choices, style=wx.CB_DROPDOWN | wx.CB_READONLY, size=(90, -1))
-        self.cb_chunk.SetSelection(config.get("chunk_size_idx", 0))  # Default: 1 min
-        
-        if not self.chk_chunk.GetValue():
-            self.st_chunk_dur.Disable()
-            self.cb_chunk.Disable()
-            
-        hbox_chunk.Add(self.cb_chunk, flag=wx.ALIGN_CENTER_VERTICAL)
-        vbox.Add(hbox_chunk, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
-
-        # --- Delete Silent Stems checkbox ---
-        hbox_silent = wx.BoxSizer(wx.HORIZONTAL)
-        self.chk_delete_silent = wx.CheckBox(self.panel, label=i18n.tr("delete_silent_stems"))
-        self.chk_delete_silent.SetValue(config.get("delete_silent_stems", False))
-        hbox_silent.Add(self.chk_delete_silent, flag=wx.ALIGN_CENTER_VERTICAL)
-        vbox.Add(hbox_silent, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
 
         # --- Buttons ---
         hbox5 = wx.BoxSizer(wx.HORIZONTAL)

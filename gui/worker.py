@@ -677,7 +677,13 @@ class SeparationThread(threading.Thread):
                             old_path = os.path.join(file_output_dir, f)
                             
                             if stem in rename_map:
-                                new_name = f"{rename_map[stem].lstrip('_')}{clean_ext}"
+                                suffix = rename_map[stem].lstrip('_')
+                                # Prepend original filename if not using subfolders
+                                if not self.use_subfolder:
+                                    new_name = f"{folder_name}_{suffix}{clean_ext}"
+                                else:
+                                    new_name = f"{suffix}{clean_ext}"
+                                
                                 new_path = os.path.join(file_output_dir, new_name)
                                 if os.path.exists(new_path):
                                     os.remove(new_path)
@@ -783,14 +789,20 @@ class SeparationThread(threading.Thread):
                             if stem_match:
                                 pass_file_path = os.path.join(temp_dir_1, f1)
                                 if "m1_keep_pass_stem_name" in self.preset_config:
-                                    suffix = self.preset_config["m1_keep_pass_stem_name"]
-                                    out_name = f"{suffix.lstrip('_')}{clean_ext}"
+                                    suffix = self.preset_config["m1_keep_pass_stem_name"].lstrip('_')
+                                    if not self.use_subfolder:
+                                        out_name = f"{folder_name}_{suffix}{clean_ext}"
+                                    else:
+                                        out_name = f"{suffix}{clean_ext}"
                                     final_path = os.path.join(file_output_dir, out_name)
                                     shutil.copy(os.path.join(temp_dir_1, f1), final_path)
                                     final_outputs.append(out_name)
                             else:
-                                suffix = self.preset_config.get("m1_keep_name", "_Instrumental")
-                                out_name = f"{suffix.lstrip('_')}{clean_ext}"
+                                suffix = self.preset_config.get("m1_keep_name", "_Instrumental").lstrip('_')
+                                if not self.use_subfolder:
+                                    out_name = f"{folder_name}_{suffix}{clean_ext}"
+                                else:
+                                    out_name = f"{suffix}{clean_ext}"
                                 final_path = os.path.join(file_output_dir, out_name)
                                 shutil.copy(os.path.join(temp_dir_1, f1), final_path)
                                 final_outputs.append(out_name)
@@ -811,6 +823,7 @@ class SeparationThread(threading.Thread):
 
                             pass_file_path_2 = None
                             pass_stem_2 = self.preset_config.get("pass_stem_2", "").lower()
+                            rename_map = self.preset_config.get("m2_rename_map", {})
                         
                             for f2 in output_files_2:
                                 stem2 = stem_from_filename(f2)
@@ -819,7 +832,6 @@ class SeparationThread(threading.Thread):
                                 # Check if this stem should be passed to model 3
                                 stem_match_2 = (pass_stem_2 != "" and (stem2 == pass_stem_2 or (stem2 in ["other", "instrumental"] and pass_stem_2 in ["other", "instrumental"])))
                                 
-                                rename_map = self.preset_config.get("m2_rename_map", {})
                                 if stem2 in rename_map:
                                     suffix = rename_map[stem2]
                                     if suffix is None: # Discard
@@ -827,7 +839,11 @@ class SeparationThread(threading.Thread):
                                 else:
                                     suffix = f"_{stem2.capitalize()}"
                                 
-                                out_name = f"{suffix.lstrip('_')}{clean_ext}"
+                                suffix = suffix.lstrip('_')
+                                if not self.use_subfolder:
+                                    out_name = f"{folder_name}_{suffix}{clean_ext}"
+                                else:
+                                    out_name = f"{suffix}{clean_ext}"
                                 final_path = os.path.join(file_output_dir, out_name)
                                 
                                 if stem_match_2:
@@ -867,7 +883,12 @@ class SeparationThread(threading.Thread):
                                     else:
                                         suffix = f"_{stem3.capitalize()}"
                                     
-                                    out_name = f"{suffix.lstrip('_')}{clean_ext}"
+                                    suffix = suffix.lstrip('_')
+                                    if not self.use_subfolder:
+                                        out_name = f"{folder_name}_{suffix}{clean_ext}"
+                                    else:
+                                        out_name = f"{suffix}{clean_ext}"
+                                    
                                     final_path = os.path.join(file_output_dir, out_name)
                                     shutil.copy(os.path.join(temp_dir_3, f3), final_path)
                                     final_outputs.append(out_name)
@@ -900,7 +921,12 @@ class SeparationThread(threading.Thread):
                         old_path = os.path.join(file_output_dir, f)
                         if os.path.exists(old_path):
                             # Strip the temp safe_base prefix, keep only stem+model part
-                            new_name = f.replace(safe_base, "").lstrip("_")
+                            suffix = f.replace(safe_base, "").lstrip("_")
+                            if not self.use_subfolder:
+                                new_name = f"{folder_name}_{suffix}"
+                            else:
+                                new_name = suffix
+                            
                             new_path = os.path.join(file_output_dir, new_name)
                             if os.path.exists(new_path) and old_path != new_path:
                                 os.remove(new_path)
@@ -957,11 +983,22 @@ class SeparationThread(threading.Thread):
                             d1, sr1 = sf.read(os.path.join(temp_dir_1, f1))
                             d2, _ = sf.read(os.path.join(temp_dir_2, match_2[0]))
                             mixed = blend_audio(d1, d2, algorithm)
-                            out_name = f"(Ensemble_{stem1.capitalize()}){clean_ext}"
+                            
+                            suffix = stem1.capitalize()
+                            if not self.use_subfolder:
+                                out_name = f"{folder_name}_Ensemble_{suffix}{clean_ext}"
+                            else:
+                                out_name = f"Ensemble_{suffix}{clean_ext}"
+                            
                             sf.write(os.path.join(file_output_dir, out_name), mixed, sr1)
                             final_outputs.append(out_name)
                         else:
-                            out_name = f"(Ensemble_{stem1.capitalize()}_M1){clean_ext}"
+                            suffix = f"{stem1.capitalize()}_M1"
+                            if not self.use_subfolder:
+                                out_name = f"{folder_name}_Ensemble_{suffix}{clean_ext}"
+                            else:
+                                out_name = f"Ensemble_{suffix}{clean_ext}"
+                                
                             shutil.copy(os.path.join(temp_dir_1, f1), os.path.join(file_output_dir, out_name))
                             final_outputs.append(out_name)
                     # Stems only in M2
@@ -971,7 +1008,12 @@ class SeparationThread(threading.Thread):
                         
                         if not any(stem_from_filename(f) in (stem2, "other" if stem2 == "instrumental" else None) for f in output_files_1):
                             clean_ext = os.path.splitext(f2)[1]
-                            out_name = f"(Ensemble_{stem2.capitalize()}_M2){clean_ext}"
+                            suffix = f"{stem2.capitalize()}_M2"
+                            if not self.use_subfolder:
+                                out_name = f"{folder_name}_Ensemble_{suffix}{clean_ext}"
+                            else:
+                                out_name = f"Ensemble_{suffix}{clean_ext}"
+                                
                             shutil.copy(os.path.join(temp_dir_2, f2), os.path.join(file_output_dir, out_name))
                             final_outputs.append(out_name)
 

@@ -50,7 +50,7 @@
     "ensemble_algorithm_tooltip": "Algorithm used to fuse the two models' outputs",
     "chunk_enable": "Enable Chunking (for long files / OOM prevention)",
     "chunk_duration_label": "Chunk Size:",
-    "remove_leading_numbers": "Remove leading numbers from output folder",
+    "remove_leading_numbers": "Remove leading numbers from output names",
     "browse_folder": "Browse Folder",
     "choose_input_dir": "Choose Input Directory",
     "no_audio_files_found": "No audio files found in the selected folder.",

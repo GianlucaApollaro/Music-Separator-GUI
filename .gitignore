@@ -59,4 +59,3 @@ refactor.py
 # Publishing scripts
 publish_*.bat
 commit_*.bat
-release_notes_*.md

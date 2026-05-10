@@ -55,6 +55,7 @@ ffmpeg_Mac_bin/
 *.zip
 Mac/
 refactor.py
+release_notes_*.md
 
 # Publishing scripts
 publish_*.bat

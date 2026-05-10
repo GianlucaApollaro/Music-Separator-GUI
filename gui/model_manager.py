@@ -36,15 +36,15 @@ class ModelManager:
             "De-Reverb / De-Echo": [
                 "dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt",
                 "dereverb_mel_band_roformer_less_aggressive_anvuew_sdr_18.8050.ckpt",
-                "dereverb-echo_mel_band_roformer_sdr_13.4843_v2.ckpt",
-                "dereverb-echo_mel_band_roformer_sdr_10.0169.ckpt"
+                "dereverb-echo_mel_band_roformer_sdr_13.4843_v2.ckpt"
             ],
             "Voice Gender Split (Male/Female)": [
                 "bs_roformer_male_female_by_aufr33_sdr_7.2889.ckpt",
                 "model_chorus_bs_roformer_ep_267_sdr_24.1275.ckpt"
             ],
             "Karaoke / Backing Vocals": [
-                "mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt"
+                "mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt",
+                "karaoke_bs_roformer_anvuew.ckpt"
             ],
             "Crowd / Applause Extraction": [
                 "mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144.ckpt",
@@ -95,6 +95,12 @@ class ModelManager:
             ],
             "Multi-Stem Models": [
                 "bs_roformer_multistem.safetensors",
+            ],
+            "anvuew Custom Models": [
+                "bs_roformer_anvuew_sdr_12.45.ckpt",
+                "bs_roformer_ft1_anvuew_sdr_12.55.ckpt",
+                "bs_roformer_mag_anvuew.ckpt",
+                "dereverb_bs_roformer_anvuew_sdr_22.5050.ckpt"
             ]
         }
 
@@ -344,6 +350,56 @@ class ModelManager:
         }
         self.downloadable_models_by_file["bs_roformer_multistem.safetensors"] = multistem_info
 
+        # -----------------------------------------------------------------------
+        # anvuew Custom Models
+        # All are BS-Roformer architecture. Their official YAML configs already
+        # include 'model_type: bs_roformer', so no structural patching is needed.
+        # We only add 'is_roformer: true' if missing (safe, non-destructive).
+        # Each model uses a unique YAML filename to avoid collisions in models_dir.
+        # -----------------------------------------------------------------------
+        _anvuew_karaoke_base = "https://huggingface.co/anvuew/karaoke_bs_roformer/resolve/main/"
+        anvuew_karaoke_info = {
+            # In the repo the files are already named with _anvuew suffix
+            "karaoke_bs_roformer_anvuew.ckpt": _anvuew_karaoke_base + "karaoke_bs_roformer_anvuew.ckpt",
+            "karaoke_bs_roformer_anvuew.yaml": _anvuew_karaoke_base + "karaoke_bs_roformer_anvuew.yaml",
+        }
+        self.downloadable_models["Roformer Model: Karaoke BS-Roformer | (by anvuew)"] = anvuew_karaoke_info
+        self.downloadable_models_by_file["karaoke_bs_roformer_anvuew.ckpt"] = anvuew_karaoke_info
+
+        _anvuew_bs_base = "https://huggingface.co/anvuew/BS-RoFormer/resolve/main/"
+        # Both bs and ft1 share the same config.yaml; we save it locally as bs_roformer_anvuew.yaml
+        anvuew_bs_info = {
+            "bs_roformer_anvuew_sdr_12.45.ckpt": _anvuew_bs_base + "bs_roformer_anvuew_sdr_12.45.ckpt",
+            "bs_roformer_anvuew.yaml": _anvuew_bs_base + "config.yaml",
+        }
+        self.downloadable_models["Roformer Model: BS-Roformer | (by anvuew)"] = anvuew_bs_info
+        self.downloadable_models_by_file["bs_roformer_anvuew_sdr_12.45.ckpt"] = anvuew_bs_info
+
+        anvuew_bs_ft1_info = {
+            "bs_roformer_ft1_anvuew_sdr_12.55.ckpt": _anvuew_bs_base + "bs_roformer_ft1_anvuew_sdr_12.55.ckpt",
+            "bs_roformer_anvuew.yaml": _anvuew_bs_base + "config.yaml",
+        }
+        self.downloadable_models["Roformer Model: BS-Roformer FT1 | (by anvuew)"] = anvuew_bs_ft1_info
+        self.downloadable_models_by_file["bs_roformer_ft1_anvuew_sdr_12.55.ckpt"] = anvuew_bs_ft1_info
+
+        _anvuew_mag_base = "https://huggingface.co/anvuew/BS_RoFormer_mag/resolve/main/"
+        # YAML in repo is config.yaml; saved locally as bs_roformer_mag_anvuew.yaml
+        anvuew_mag_info = {
+            "bs_roformer_mag_anvuew.ckpt": _anvuew_mag_base + "bs_roformer_mag_anvuew.ckpt",
+            "bs_roformer_mag_anvuew.yaml": _anvuew_mag_base + "config.yaml",
+        }
+        self.downloadable_models["Roformer Model: BS-Roformer Magnitude | (by anvuew)"] = anvuew_mag_info
+        self.downloadable_models_by_file["bs_roformer_mag_anvuew.ckpt"] = anvuew_mag_info
+
+        _anvuew_dereverb_base = "https://huggingface.co/anvuew/dereverb_bs_roformer/resolve/main/"
+        # YAML in repo is config.yaml; saved locally as dereverb_bs_roformer_anvuew.yaml
+        anvuew_dereverb_info = {
+            "dereverb_bs_roformer_anvuew_sdr_22.5050.ckpt": _anvuew_dereverb_base + "dereverb_bs_roformer_anvuew_sdr_22.5050.ckpt",
+            "dereverb_bs_roformer_anvuew.yaml": _anvuew_dereverb_base + "config.yaml",
+        }
+        self.downloadable_models["Roformer Model: Dereverb BS-Roformer | (by anvuew)"] = anvuew_dereverb_info
+        self.downloadable_models_by_file["dereverb_bs_roformer_anvuew_sdr_22.5050.ckpt"] = anvuew_dereverb_info
+
         # Demucs aliases to help resolve and download
         self.downloadable_aliases["htdemucs"] = {"htdemucs.yaml": ""}
         self.downloadable_aliases["htdemucs_ft"] = {"htdemucs_ft.yaml": ""}
@@ -420,7 +476,17 @@ class ModelManager:
             "config_dereverb-echo_mel_band_roformer.yaml", "config_dereverb_echo_mbr_v2.yaml",
             "bs_roformer_multistem_config.yaml",
         ]
-        if basename not in ["inst_gaboxFlowersV10.yaml", "Inst_Fv8.yaml", "Lead_VocalDereverb.yaml", "last_bs_roformer.yaml"] + unwa_yamls:
+        # anvuew models: their official YAMLs already have 'model_type: bs_roformer'
+        # so only the safe 'is_roformer: true' injection is applied (if missing).
+        # No dim/depth or num_subbands patches are applied to these.
+        anvuew_yamls = [
+            "karaoke_bs_roformer_anvuew.yaml",
+            "bs_roformer_anvuew.yaml",
+            "bs_roformer_mag_anvuew.yaml",
+            "dereverb_bs_roformer_anvuew.yaml",
+        ]
+        if basename not in (["inst_gaboxFlowersV10.yaml", "Inst_Fv8.yaml", "Lead_VocalDereverb.yaml", "last_bs_roformer.yaml"]
+                            + unwa_yamls + anvuew_yamls):
             return
 
         try:
@@ -436,8 +502,13 @@ class ModelManager:
 
             # Explicitly declare model architecture so roformer_loader doesn't guess
             if "model_type:" not in content:
-                # If it's the last_bs_roformer, it's a BS Roformer, otherwise it's MelBand
-                is_bs = any(x in basename for x in ["last_bs_roformer", "bs_large", "hyperace", "Resurrection", "revive", "fno"])
+                # anvuew models already ship with model_type, so this only fires for
+                # older/third-party YAMLs that lack it.
+                is_bs = any(x in basename for x in [
+                    "last_bs_roformer", "bs_large", "hyperace", "Resurrection", "revive", "fno",
+                    "bs_roformer_anvuew", "karaoke_bs_roformer_anvuew", "bs_roformer_mag_anvuew",
+                    "dereverb_bs_roformer_anvuew"
+                ])
                 mtype = "bs_roformer" if is_bs else "mel_band_roformer"
                 content = f"model_type: {mtype}\n" + content
                 changed = True

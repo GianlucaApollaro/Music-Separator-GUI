@@ -1,40 +1,61 @@
 ===============================================================================
                        MUSIC SEPARATOR - USER MANUAL                       
-                       ENGLISH MANUAL (EN) - v1.4
+                       ENGLISH MANUAL (EN) - v1.5
 ===============================================================================
 
 Welcome to Music separator, a powerful AI-driven audio separation tool based on 
 the state-of-the-art Roformer and MDX architectures. This application allows 
 you to isolate vocals, instruments, and specific elements with studio quality.
 
+OFFICIAL DOWNLOAD:
+You can always download the latest version of Music separator from:
+https://github.com/GianlucaApollaro/Music-Separator-GUI/releases/latest
+
 1. INSTALLATION
 -------------------------------------------------------------------------------
 WINDOWS:
-- If you downloaded the precompiled version, launch 'Music separator.exe' directly.
+- Download the version suitable for your system (.7z for CPU or GPU).
+- Extract the archive and launch 'Music separator.exe' (GPU version)
+  or 'Music separator CPU.exe' (CPU version) directly.
 - If installing from source:
-  - Run 'install.bat' to create the virtual environment and install dependencies.
-  - Use 'run.bat' to launch the application.
-  - If you don't have an NVIDIA GPU, use 'install_cpu.bat' and 'run_Cpu.bat'.
+  - Run 'install.bat' (or 'install_cpu.bat') to install dependencies.
+  - Use 'run.bat' (or 'run_Cpu.bat') to launch the application.
 
 macOS (Apple Silicon M1/M2/M3/M4):
-- Extract the .zip file and move the folder to /Applications.
+- Download the Mac version (.zip) and extract the archive.
+- Move the resulting folder to /Applications.
 - Right-click 'Music separator.app' and choose 'Open'.
 - NOTE: FFmpeg is included in the package. If you face permission issues, 
-  refer to the README for 'xattr' instructions.
+  refer to the README for 'xattr' command instructions.
 
-2. AUTOMATIC PRE-PROCESSING (NEW in v1.4)
+2. WHAT'S NEW in v1.5
 -------------------------------------------------------------------------------
-Music separator now automatically prepares your audio for the best AI results:
-- Normalization: All input audio is normalized to a -0.1 dBFS peak before 
-  separation, ensuring optimal volume without clipping.
-- Stereo Downmix: Multi-channel files (e.g., 5.1 or 7.1) are automatically 
-  downmixed to stereo before being processed by the AI models.
+- Enable Preview: When ticked, the application will cut and separate a 30-second
+  portion of the audio (you can choose between the first 30 seconds or the final
+  30 seconds via the dropdown selector that appears next to it). The outputs are
+  saved in a dedicated folder named 'previews' created at the same level as the
+  output folder. Very useful for testing models quickly.
+- Bandit & SCNet Support: Added support for loading and separating audio with the
+  new state-of-the-art Bandit (v2 and Plus) and SCNet models. The program
+  automatically handles model source fetching and uses lightweight mocks to prevent
+  heavy training library installs.
+- Drums / No Drums Preset: Added a new preset that separates the audio into
+  "Drums" and "No Drums" (all other stems combined), using the new remaining
+  stems mixing feature for single models.
+- Auto-Updater: The program now checks for updates at startup or manually 
+  via the 'Help' -> 'Check for updates...' menu. If available, the update 
+  is downloaded and installed with a single click.
+- Automatic Pre-Processing (v1.4):
+  - Normalization: All input audio is normalized to a -0.1 dBFS peak before 
+    separation, ensuring optimal volume without clipping.
+  - Downmix Stereo: Multi-channel files (e.g., 5.1 or 7.1) are automatically 
+    downmixed to stereo before being processed by the AI models.
 
 3. BASIC USAGE (SINGLE MODEL)
 -------------------------------------------------------------------------------
 1. Select your input file (WAV, FLAC, MP3, MP4, MKV, etc.).
 2. Choose an Output Directory.
-3. Select a Model from the dropdown (categorized by type: Vocals, etc.).
+3. Select a Model from the tree picker (categorized by type: Vocals, etc.).
 4. Select the output format (WAV, FLAC, or MP3 at 320kbps).
 5. Click "Start Separation".
 
@@ -55,27 +76,30 @@ AVAILABLE PRESETS:
 - Vocal De-Reverb: Separates Vocals, then removes reverb/echo from the voice.
 - Ultimate Stems (7 Tracks): High-quality Vocals and Instrumental extraction, 
   then splits Instrumental into Bass, Drums, Piano, Guitar, and Other.
-- Ultimate Stems + Drum Split: Same as above, but further splits drums into 
-  Kick, Snare, Cymbals, Toms, etc. (10+ tracks total).
+- Ultimate Stems + Drum Split: A 4-pass preset that separates Lead Vocals,
+  Backing Vocals, Instrumental, Bass, Piano, Guitar, and splits drums into
+  individual components (Kick, Snare, Hi-Hat, Toms, etc., for 10+ tracks total).
 - Guitar Extraction: Specialized preset to isolate guitars from the track.
 - Male/Female Split: Specifically isolates male vs. female voices.
 - Live Restore: Extracts Crowd/Applause, then cleans the remaining audio.
 - RVC Vocal Prep: Extracts clean Lead vocals for RVC voice cloning.
 - Only Drums: Isolates only the drum kit, removing all other instruments.
+- Only Drums + Backing: Extracts the drums (_Drums) and merges the rest of the
+  song into one backing track (_No_Drums).
 
-6. OUTPUT OPTIONS AND CLEANUP (v1.4)
+6. OUTPUT OPTIONS AND CLEANUP
 -------------------------------------------------------------------------------
-- Save in subfolder: (Default) Creates a folder named after the song. If 
-  disabled, files are saved directly in the output directory.
-- Delete silent stems: If enabled, the program checks if generated stems are 
-  empty or very silent (below -50 dB) and deletes them to keep folders clean.
-- Play Stem: After separation, click this button to choose a generated stem 
-   and listen to it instantly in your system player.
+- Save in subfolder: Creates a folder named after the song. If disabled, 
+  files are saved directly in the output directory.
+- Delete silent stems: If enabled, the program deletes generated stems that are 
+  empty or very silent (below -50 dB) to keep folders clean.
+- Play Stem: Click to play the newly created stems directly in your default 
+  system media player.
 
 7. CHUNKING (LONG FILES / OUT-OF-MEMORY PREVENTION)
 -------------------------------------------------------------------------------
 If you experience crashes with long files or have low VRAM:
-- Check "Enable Chunking" and select a size (e.g., 2 min).
+- Check "Enable Chunking" and select a chunk size (e.g., 2 min).
 
 8. BATCH PROCESSING (FILES AND FOLDERS)
 -------------------------------------------------------------------------------
@@ -85,6 +109,6 @@ and "Browse Folder" buttons.
 9. TECHNICAL NOTES AND SUFFIXES
 -------------------------------------------------------------------------------
 Output files will have clear suffixes such as:
-_Vocals, _Instrumental, _Lead, _Backing, _DeReverb, _Other, _Extra, _Drums.
+_Vocals, _Instrumental, _Lead, _Backing, _DeReverb, _Other, _Extra, _Drums, _No_Drums.
 
 ===============================================================================

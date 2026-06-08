@@ -45,6 +45,7 @@
     "preset_crowd_live": "Live Restore (Crowd + Vocal + Inst)",
     "preset_vocal_rvc": "RVC Vocal Prep (Lead Clean + Reverb + Instrumental/BVs)",
     "preset_only_drums": "Only Drums (Extraction of drums only)",
+    "preset_drums_no_drums": "Only Drums + Backing (Drums + No Drums)",
     "preset_guitar_specialist": "Guitar Extraction (3 Stems)",
     "ensemble_algorithm": "Ensemble Algorithm:",
     "ensemble_algorithm_tooltip": "Algorithm used to fuse the two models' outputs",
@@ -72,5 +73,22 @@
     "stem_play_dialog_title": "Play a generated stem",
     "stem_play_no_files": "No output files available. Run a separation first.",
     "status_silent_stem_deleted": "Deleted silent stem: {file}",
-    "status_normalizing": "Normalizing input audio to -0.1 dBFS..."
-}
+    "status_normalizing": "Normalizing input audio to -0.1 dBFS...",
+    "model_search": "Search:",
+    "enable_preview": "Enable Preview (30 seconds)",
+    "preview_first_30": "First 30 seconds",
+    "preview_final_30": "Final 30 seconds",
+    "menu_help": "Help",
+    "menu_check_updates": "Check for updates...",
+    "update_checking": "Checking for updates...",
+    "update_up_to_date": "Music Separator is up to date (Version {version}).",
+    "update_available": "A new update is available!\n\nVersion: {version}\nEdition: {edition}\n\nDo you want to download and install it now?",
+    "update_downloading": "Downloading update: {percent}%",
+    "update_download_err": "Failed to download the update package.",
+    "update_err": "An error occurred while checking for updates:\n{error}",
+    "update_no_asset": "Could not find an update package matching your current edition ({edition}).",
+    "btn_download_install": "Download and Install",
+    "btn_open_release": "Open Release Page",
+    "btn_later": "Later",
+    "error_unsupported_model": "The model '{model}' uses the '{architecture}' architecture, which is not supported by this version of the separator library. Please select another model (e.g. BS-Roformer, Mel-Roformer, MDX23C or standard MDX/VR models)."
+}

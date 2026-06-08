@@ -417,6 +417,13 @@ class ModelManager:
                 model_list.append(m)
         return model_list
 
+    def get_model_categories(self) -> Dict[str, List[str]]:
+        """Wait up to 5 seconds for the model catalog to be ready and return
+        models grouped by category: {category_name: [filename, ...]}."""
+        if not self._ready_event.wait(timeout=5.0):
+            logger.warning("Model catalog not ready yet, returning partial categories.")
+        return self.models_dict
+
     def resolve_and_download(self, model_name: str, logger_callback: Callable[[str], None], progress_callback: Callable[[float, float], None]) -> Optional[str]:
         files_to_download = {}
         target_model_filename = model_name

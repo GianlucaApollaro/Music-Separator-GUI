@@ -10,6 +10,7 @@ class PresetManager:
         "preset_crowd_live",
         "preset_vocal_rvc",
         "preset_only_drums",
+        "preset_drums_no_drums",
     ]
 
     presets_config = {
@@ -69,14 +70,19 @@ class PresetManager:
         },
         "preset_ultimate_drums": {
             "type": "chain",
-            "model_1": "mel_band_roformer_becruily_deux.ckpt",
-            "model_2": "BS-Roformer-SW.ckpt",
-            "model_3": "MDX23C-DrumSep-aufr33-jarredou.ckpt",
+            "model_1": "bs_roformer_karaoke_frazer_becruily.ckpt",
+            "model_2": "mel_band_roformer_becruily_deux.ckpt",
+            "model_3": "BS-Roformer-SW.ckpt",
+            "model_4": "MDX23C-DrumSep-aufr33-jarredou.ckpt",
             "pass_stem": "instrumental",
-            "pass_stem_2": "drums",
-            "m1_keep_name": "_Vocals",
-            "m2_keep_pass_stem_name": "_Drums_Stereo", # Keep the stereo drums too
+            "pass_stem_2": "instrumental",
+            "pass_stem_3": "drums",
+            "m1_keep_name": "_Lead",
             "m2_rename_map": {
+                "vocals": "_Backing"
+            },
+            "m3_keep_pass_stem_name": "_Drums_Stereo", # Keep the stereo drums too
+            "m3_rename_map": {
                 "bass": "_Bass",
                 "piano": "_Piano",
                 "guitar": "_Guitar",
@@ -84,7 +90,7 @@ class PresetManager:
                 "drums": "_Drums_Stereo",
                 "vocals": "_Extra"
             },
-            "m3_rename_map": {
+            "m4_rename_map": {
                 "kick": "_Kick",
                 "snare": "_Snare",
                 "hi-hat": "_Hi-Hat",
@@ -135,6 +141,14 @@ class PresetManager:
             "rename_map": {
                 "drums": "_Drums"
             }
+        },
+        "preset_drums_no_drums": {
+            "type": "single",
+            "model_1": "BS-Roformer-SW.ckpt",
+            "rename_map": {
+                "drums": "_Drums"
+            },
+            "mix_remaining_to": "_No_Drums"
         },
     }
 

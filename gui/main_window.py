@@ -9,22 +9,31 @@ from gui.utils import download_file
 from gui.preset_manager import PresetManager
 from gui.model_manager import ModelManager
 from gui.config_manager import config
+from gui.model_tree_picker import ModelTreePicker, EVT_MODEL_SELECTED
+from gui.version import __version__
+from gui import updater
 
 class MainWindow(wx.Frame):
     def __init__(self, parent, title):
-        super(MainWindow, self).__init__(parent, title=i18n.tr("app_title"), size=(600, 600))
+        super(MainWindow, self).__init__(parent, title=f"{i18n.tr('app_title')} v{__version__}", size=(620, 720))
         
         self.worker = None
         self.model_manager = ModelManager()
         self.last_output_files = []  # paths of last generated stems, for playback
+        # Mapping between display names (no extension) and actual filenames
+        self.display_to_file: dict = {}
+        self.file_to_display: dict = {}
+        self.model_list: list = []
 
         self.InitUI()
         self.InitMenu()
         self.Centre()
-        self.OnPresetChange(None)  # Applica lo stato del preset salvato all'avvio
+        wx.CallAfter(self.OnPresetChange, None)   # Applica lo stato del preset salvato all'avvio
+        wx.CallAfter(self.OnEnsembleCheck, None)  # Applica lo stato ensemble salvato all'avvio
         
         self.Bind(wx.EVT_CLOSE, self.OnClose)
         wx.CallAfter(self._check_ffmpeg)
+        wx.CallAfter(updater.check_for_updates, self, False, True)
         
         # Bind Custom Events
         self.Connect(-1, -1, EVT_LOG_ID, self.OnLog)
@@ -36,38 +45,47 @@ class MainWindow(wx.Frame):
     def _populate_model_combobox(self):
         old_val_1 = self.cb_model.GetValue()
         old_val_2 = self.cb_model_2.GetValue()
-        
-        self.model_list = self.model_manager.get_model_list()
+
         self.display_to_file = {}
         self.file_to_display = {}
-        
-        self.cb_model.Clear()
-        self.cb_model_2.Clear()
-        
-        display_names = []
-        for m in self.model_list:
-            display_name = m
-            for ext in ['.ckpt', '.onnx', '.yaml', '.safetensors', '.th', '.pth']:
-                if display_name.lower().endswith(ext):
-                    display_name = display_name[:-len(ext)]
-                    break
-            
-            self.display_to_file[display_name] = m
-            self.file_to_display[m] = display_name
-            display_names.append(display_name)
-            self.cb_model.Append(display_name)
-            self.cb_model_2.Append(display_name)
-            
-        # Restore selection using display names
-        if old_val_1 in display_names:
+
+        # Build per-category display names (strip file extensions)
+        raw_categories = self.model_manager.get_model_categories()
+        display_categories = {}
+        for category, models in raw_categories.items():
+            display_models = []
+            seen = set()
+            for m in models:
+                display_name = m
+                for ext in ['.ckpt', '.onnx', '.yaml', '.safetensors', '.th', '.pth']:
+                    if display_name.lower().endswith(ext):
+                        display_name = display_name[:-len(ext)]
+                        break
+                if display_name not in seen:
+                    seen.add(display_name)
+                    self.display_to_file[display_name] = m
+                    self.file_to_display[m] = display_name
+                    display_models.append(display_name)
+            if display_models:
+                display_categories[category] = display_models
+
+        self.model_list = list(self.display_to_file.keys())
+
+        # Feed category data to both tree pickers
+        self.cb_model.Populate(display_categories)
+        self.cb_model_2.Populate(display_categories)
+
+        # Restore model 1 selection
+        if old_val_1 and old_val_1 in self.display_to_file:
             self.cb_model.SetValue(old_val_1)
         elif old_val_1 in self.file_to_display:
             self.cb_model.SetValue(self.file_to_display[old_val_1])
         else:
             default_m1 = config.get("model_1", self.model_list[0] if self.model_list else "")
             self.cb_model.SetValue(self.file_to_display.get(default_m1, default_m1))
-            
-        if old_val_2 in display_names:
+
+        # Restore model 2 selection
+        if old_val_2 and old_val_2 in self.display_to_file:
             self.cb_model_2.SetValue(old_val_2)
         elif old_val_2 in self.file_to_display:
             self.cb_model_2.SetValue(self.file_to_display[old_val_2])
@@ -98,6 +116,13 @@ class MainWindow(wx.Frame):
 
         fileMenu.AppendSubMenu(langMenu, i18n.tr("menu_language"))
         menubar.Append(fileMenu, i18n.tr("menu_file"))
+        
+        # Help Menu (Auto-Updater)
+        helpMenu = wx.Menu()
+        updateItem = helpMenu.Append(wx.ID_ANY, i18n.tr("menu_check_updates"))
+        self.Bind(wx.EVT_MENU, self.OnCheckUpdates, updateItem)
+        menubar.Append(helpMenu, i18n.tr("menu_help"))
+
         self.SetMenuBar(menubar)
 
     def InitUI(self):
@@ -133,17 +158,12 @@ class MainWindow(wx.Frame):
         vbox.Add(hbox2, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
 
         # --- Model Selection ---
-        hbox3 = wx.BoxSizer(wx.HORIZONTAL)
         self.st3 = wx.StaticText(self.panel, label=i18n.tr("model"))
-        hbox3.Add(self.st3, flag=wx.RIGHT|wx.ALIGN_CENTER_VERTICAL, border=25)
-        
-        self.model_list = self.model_manager.get_model_list()
+        vbox.Add(self.st3, flag=wx.LEFT|wx.TOP, border=10)
 
-        self.cb_model = wx.ComboBox(self.panel, choices=self.model_list, style=wx.CB_DROPDOWN)
-        self.cb_model.SetValue(config.get("model_1", self.model_list[0] if self.model_list else "")) # Default
+        self.cb_model = ModelTreePicker(self.panel)
         self.cb_model.SetToolTip(i18n.tr("model_tooltip"))
-        hbox3.Add(self.cb_model, proportion=1, flag=wx.EXPAND)
-        vbox.Add(hbox3, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
+        vbox.Add(self.cb_model, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=4)
 
         # --- Ensemble Option ---
         hbox_ens_chk = wx.BoxSizer(wx.HORIZONTAL)
@@ -154,20 +174,16 @@ class MainWindow(wx.Frame):
         vbox.Add(hbox_ens_chk, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
 
         # --- Secondary Model (Ensemble) ---
-        hbox_ens_mod = wx.BoxSizer(wx.HORIZONTAL)
+        # Hidden by default; shown/hidden dynamically by OnEnsembleCheck.
         self.st_model_2 = wx.StaticText(self.panel, label=i18n.tr("secondary_model"))
-        hbox_ens_mod.Add(self.st_model_2, flag=wx.RIGHT|wx.ALIGN_CENTER_VERTICAL, border=10)
-        self.cb_model_2 = wx.ComboBox(self.panel, choices=self.model_list, style=wx.CB_DROPDOWN)
-        if config.get("model_2", "") in self.model_list:
-            self.cb_model_2.SetValue(config.get("model_2", ""))
-        elif len(self.model_list) > 1:
-            self.cb_model_2.SetValue(self.model_list[1])
-        else:
-            self.cb_model_2.SetValue(self.model_list[0] if self.model_list else "")
-        self.cb_model_2.Disable()
         self.st_model_2.Disable()
-        hbox_ens_mod.Add(self.cb_model_2, proportion=1, flag=wx.EXPAND)
-        vbox.Add(hbox_ens_mod, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
+        self.st_model_2.Hide()
+        vbox.Add(self.st_model_2, flag=wx.LEFT|wx.TOP, border=10)
+
+        self.cb_model_2 = ModelTreePicker(self.panel)
+        self.cb_model_2.Disable()
+        self.cb_model_2.Hide()
+        vbox.Add(self.cb_model_2, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=4)
 
         # --- Ensemble Algorithm ---
         self.ensemble_algorithms = [
@@ -247,13 +263,25 @@ class MainWindow(wx.Frame):
         hbox_files.Add(self.chk_delete_silent, flag=wx.LEFT, border=15)
         vbox.Add(hbox_files, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
 
-        # --- Row 6: Output Format ---
+        # --- Row 6: Output Format & Preview ---
         hbox_format = wx.BoxSizer(wx.HORIZONTAL)
         self.st_format = wx.StaticText(self.panel, label=i18n.tr("output_format"))
         hbox_format.Add(self.st_format, flag=wx.RIGHT|wx.ALIGN_CENTER_VERTICAL, border=10)
         self.cb_format = wx.ComboBox(self.panel, choices=['WAV', 'FLAC', 'MP3'], style=wx.CB_DROPDOWN | wx.CB_READONLY)
         self.cb_format.SetValue(config.get("output_format", 'WAV'))
-        hbox_format.Add(self.cb_format)
+        hbox_format.Add(self.cb_format, flag=wx.ALIGN_CENTER_VERTICAL)
+        
+        self.chk_preview = wx.CheckBox(self.panel, label=i18n.tr("enable_preview"))
+        self.chk_preview.SetValue(config.get("enable_preview", False))
+        self.chk_preview.Bind(wx.EVT_CHECKBOX, self.OnTogglePreview)
+        hbox_format.Add(self.chk_preview, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL, border=25)
+        
+        self.cb_preview_mode = wx.ComboBox(self.panel, choices=[i18n.tr("preview_first_30"), i18n.tr("preview_final_30")], style=wx.CB_DROPDOWN | wx.CB_READONLY)
+        preview_mode = config.get("preview_mode", "first")
+        self.cb_preview_mode.SetSelection(1 if preview_mode == "final" else 0)
+        self.cb_preview_mode.Show(self.chk_preview.GetValue())
+        hbox_format.Add(self.cb_preview_mode, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL, border=10)
+        
         vbox.Add(hbox_format, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
 
 
@@ -293,21 +321,27 @@ class MainWindow(wx.Frame):
     def OnEnsembleCheck(self, event):
         is_checked = self.chk_ensemble.GetValue()
         if is_checked:
-            self.cb_model_2.Enable()
+            self.st_model_2.Show()
             self.st_model_2.Enable()
+            self.cb_model_2.Show()
+            self.cb_model_2.Enable()
             self.cb_ens_algo.Enable()
             self.st_ens_algo.Enable()
             self.cb_preset.Hide()
             self.st_preset.Hide()
         else:
             self.cb_model_2.Disable()
+            self.cb_model_2.Hide()
             self.st_model_2.Disable()
+            self.st_model_2.Hide()
             self.cb_ens_algo.Disable()
             self.st_ens_algo.Disable()
             self.cb_preset.Show()
             self.st_preset.Show()
         self.panel.Layout()
-        config.set("enable_ensemble", is_checked)
+        self.Layout()
+        if event is not None:
+            config.set("enable_ensemble", is_checked)
 
     def OnChunkCheck(self, event):
         is_checked = self.chk_chunk.GetValue()
@@ -317,6 +351,11 @@ class MainWindow(wx.Frame):
         else:
             self.st_chunk_dur.Disable()
             self.cb_chunk.Disable()
+
+    def OnTogglePreview(self, event):
+        show = self.chk_preview.GetValue()
+        self.cb_preview_mode.Show(show)
+        self.panel.Layout()
 
     def OnPresetChange(self, event):
         idx = self.cb_preset.GetSelection()
@@ -331,7 +370,7 @@ class MainWindow(wx.Frame):
             self.chk_ensemble.Enable()
 
     def UpdateLabels(self):
-        self.SetTitle(i18n.tr("app_title"))
+        self.SetTitle(f"{i18n.tr('app_title')} v{__version__}")
         self.st1.SetLabel(i18n.tr("input_audio"))
         self.btn_input.SetLabel(i18n.tr("browse"))
         self.btn_input_dir.SetLabel(i18n.tr("browse_folder"))
@@ -347,6 +386,17 @@ class MainWindow(wx.Frame):
         self.chk_use_subfolder.SetLabel(i18n.tr("use_subfolder"))
         self.chk_delete_silent.SetLabel(i18n.tr("delete_silent_stems"))
         self.st_format.SetLabel(i18n.tr("output_format"))
+        self.chk_preview.SetLabel(i18n.tr("enable_preview"))
+        
+        current_selection = self.cb_preview_mode.GetSelection()
+        self.cb_preview_mode.Clear()
+        self.cb_preview_mode.Append(i18n.tr("preview_first_30"))
+        self.cb_preview_mode.Append(i18n.tr("preview_final_30"))
+        if current_selection == wx.NOT_FOUND:
+            self.cb_preview_mode.SetSelection(0)
+        else:
+            self.cb_preview_mode.SetSelection(current_selection)
+            
         self.chk_chunk.SetLabel(i18n.tr("chunk_enable"))
         self.st_chunk_dur.SetLabel(i18n.tr("chunk_duration_label"))
         self.btn_start.SetLabel(i18n.tr("start_separation"))
@@ -355,6 +405,8 @@ class MainWindow(wx.Frame):
         self.st_log.SetLabel(i18n.tr("logs"))
         
         self.cb_model.SetToolTip(i18n.tr("model_tooltip"))
+        self.cb_model.UpdateSearchLabel()
+        self.cb_model_2.UpdateSearchLabel()
         if self.chk_gpu.IsEnabled():
             # Only if it was MPS
             import torch
@@ -381,6 +433,9 @@ class MainWindow(wx.Frame):
         i18n.load_language(lang_code)
         config.set("language", lang_code)
         self.UpdateLabels()
+
+    def OnCheckUpdates(self, event):
+        updater.check_for_updates(self, show_up_to_date=True, silent=False)
 
     def OnBrowseInput(self, event):
         with wx.FileDialog(self, i18n.tr("open_media_files"), wildcard="Media files (*.mp3;*.wav;*.flac;*.m4a;*.mp4;*.mkv)|*.mp3;*.wav;*.flac;*.m4a;*.mp4;*.mkv",
@@ -458,6 +513,8 @@ class MainWindow(wx.Frame):
         config.set("delete_silent_stems", self.chk_delete_silent.GetValue())
         config.set("chunk_enable", self.chk_chunk.GetValue())
         config.set("chunk_size_idx", self.cb_chunk.GetSelection())
+        config.set("enable_preview", self.chk_preview.GetValue())
+        config.set("preview_mode", "final" if self.cb_preview_mode.GetSelection() == 1 else "first")
 
         if not input_string:
             wx.MessageBox(i18n.tr("msg_select_input"), i18n.tr("msg_error_title"), wx.OK | wx.ICON_ERROR)
@@ -495,11 +552,12 @@ class MainWindow(wx.Frame):
         out_format = self.cb_format.GetValue()
         use_gpu = self.chk_gpu.GetValue()
         use_ensemble = self.chk_ensemble.GetValue()
-        model_name_2 = self.cb_model_2.GetValue()
         ensemble_algorithm = self.cb_ens_algo.GetValue()
         remove_leading_numbers = self.chk_remove_numbers.GetValue()
         use_subfolder = self.chk_use_subfolder.GetValue()
         delete_silent_stems = self.chk_delete_silent.GetValue()
+        enable_preview = self.chk_preview.GetValue()
+        preview_mode = "final" if self.cb_preview_mode.GetSelection() == 1 else "first"
 
         # Thread-safe callbacks
         def logger_cb(msg):
@@ -535,13 +593,22 @@ class MainWindow(wx.Frame):
                         _abort()
                         return
 
+                m4 = None
+                if "model_4" in preset_config:
+                    m4 = self.model_manager.resolve_and_download(preset_config["model_4"], logger_cb, progress_cb)
+                    if not m4:
+                        _abort()
+                        return
+
                 def _start_preset():
                     self.worker = SeparationThread(
                         self, input_files, output_dir, m1, use_gpu, out_format,
-                        m2, m3, preset_config, chunk_duration=chunk_duration,
+                        m2, m3, m4, preset_config, chunk_duration=chunk_duration,
                         remove_leading_numbers=remove_leading_numbers,
                         use_subfolder=use_subfolder,
-                        delete_silent_stems=delete_silent_stems
+                        delete_silent_stems=delete_silent_stems,
+                        enable_preview=enable_preview,
+                        preview_mode=preview_mode
                     )
                     self.worker.start()
                 wx.CallAfter(_start_preset)
@@ -568,7 +635,9 @@ class MainWindow(wx.Frame):
                     m2, ensemble_algorithm=algo, chunk_duration=chunk_duration,
                     remove_leading_numbers=remove_leading_numbers,
                     use_subfolder=use_subfolder,
-                    delete_silent_stems=delete_silent_stems
+                    delete_silent_stems=delete_silent_stems,
+                    enable_preview=enable_preview,
+                    preview_mode=preview_mode
                 )
                 self.worker.start()
             wx.CallAfter(_start_standard)

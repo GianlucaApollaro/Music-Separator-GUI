@@ -1,6 +1,6 @@
 ===============================================================================
                        MUSIC SEPARATOR - MANUALE UTENTE                       
-                       MANUALE ITALIANO (IT) - v1.4
+                       MANUALE ITALIANO (IT) - v1.5
 ===============================================================================
 
 Benvenuto in Music separator, un potente strumento per la separazione audio 
@@ -8,35 +8,56 @@ guidato dall'Intelligenza Artificiale, basato sulle architetture avanzate
 Roformer e MDX. Questa applicazione ti consente di isolare voci, strumenti ed 
 elementi specifici con qualita' da studio di registrazione.
 
+DOWNLOAD UFFICIALE:
+Puoi scaricare l'ultima versione di Music separator sempre dal link:
+https://github.com/GianlucaApollaro/Music-Separator-GUI/releases/latest
+
 1. INSTALLAZIONE
 -------------------------------------------------------------------------------
 WINDOWS:
-- Se hai scaricato la versione precompilata, avvia direttamente 'Music separator.exe'.
-- Se installi da sorgente:
-  - Avvia 'install.bat' per creare l'ambiente virtuale e installare le dipendenze.
-  - Usa 'run.bat' per lanciare l'applicazione.
-  - Se non hai una scheda video NVIDIA dedicata, usa 'install_cpu.bat' e 'run_Cpu.bat'.
+- Scarica la versione adatta al tuo sistema (.7z per CPU o GPU).
+- Estrai l'archivio e avvia direttamente 'Music separator.exe' (versione GPU)
+  o 'Music separator CPU.exe' (versione CPU).
+- Se preferisci installare da sorgente:
+  - Avvia 'install.bat' (o 'install_cpu.bat') per preparare le dipendenze.
+  - Usa 'run.bat' (o 'run_Cpu.bat') per lanciare l'applicazione.
 
 macOS (Apple Silicon M1/M2/M3/M4):
-- Estrai il file .zip e sposta la cartella in /Applications. 
+- Scarica la versione Mac (.zip) ed estrai l'archivio.
+- Sposta la cartella risultante in /Applications.
 - Fai clic destro su 'Music separator.app' e scegli 'Apri'.
-- NOTA: FFmpeg e' incluso nel pacchetto. Se riscontri problemi di permessi, 
-  consulta il README per le istruzioni su 'xattr'.
+- NOTA: FFmpeg e' incluso nel pacchetto. In caso di blocchi di sicurezza, 
+  consulta il README per le istruzioni sul comando 'xattr'.
 
-2. PRE-PROCESSAMENTO AUTOMATICO (NOVITA' v1.4)
+2. NOVITA' DI VERSIONE (v1.5)
 -------------------------------------------------------------------------------
-Music separator ora prepara automaticamente l'audio per ottenere i migliori 
-risultati possibili dai modelli:
-- Normalizzazione: Tutto l'audio viene normalizzato al picco di -0.1 dBFS prima 
-  della separazione, garantendo un volume ottimale senza distorsioni.
-- Downmix Stereo: Se carichi file multicanale (es. 5.1 o 7.1), il programma li 
-  converte automaticamente in stereo prima di passarli ai modelli IA.
+- Abilita Anteprima: Se spunti questa checkbox, l'applicazione ritagliera'
+  ed elaborera' una porzione di 30 secondi del file audio (puoi scegliere se i
+  primi 30 secondi o gli ultimi 30 secondi tramite l'apposito menu a tendina).
+  Gli output verranno salvati in una cartella dedicata chiamata 'previews',
+  creata allo stesso livello della cartella di output. Molto utile per testare
+  rapidamente l'efficacia dei modelli.
+- Supporto Bandit & SCNet: Abilitato il supporto per i modelli basati sulle nuove
+  architetture allo stato dell'arte Bandit (v2 e Plus) e SCNet nel selettore.
+  Il programma scarica i file sorgente ed esegue i modelli tramite mock
+  leggeri per non appesantire l'ambiente con centinaia di megabyte di dipendenze.
+- Preset "Solo Batteria + Accompagnamento": Aggiunto un nuovo preset che separa
+  la traccia in "Drums" (Batteria) e "No Drums" (tutto il resto unito),
+  sfruttando il nuovo sistema di mixing degli stem rimanenti per modello singolo.
+- Auto-Updater: Il programma ora controlla la presenza di aggiornamenti 
+  all'avvio o manualmente tramite il menu 'Aiuto' -> 'Controlla aggiornamenti...'.
+  Se disponibile, l'update viene scaricato ed installato in un clic.
+- Pre-processamento automatico (v1.4):
+  - Normalizzazione: Tutto l'audio viene normalizzato a -0.1 dBFS prima della 
+    separazione, garantendo un volume ottimale senza clipping.
+  - Downmix Stereo: I file multicanale (es. 5.1, 7.1) vengono convertiti in 
+    stereo automaticamente prima di essere passati all'IA.
 
 3. USO BASE (SINGOLO MODELLO)
 -------------------------------------------------------------------------------
 1. Seleziona il tuo file audio di input (WAV, FLAC, MP3, MP4, MKV, ecc.).
 2. Scegli una Cartella di Output.
-3. Seleziona un Modello dal menu a tendina (divisi per categoria: Voci, ecc.).
+3. Seleziona un Modello dal menu ad albero (divisi per categorie chiare).
 4. Seleziona il formato di uscita (WAV, FLAC o MP3 a 320kbps).
 5. Clicca su "Avvia Separazione".
 
@@ -44,7 +65,7 @@ risultati possibili dai modelli:
 -------------------------------------------------------------------------------
 Spunta la casella "Abilita Ensemble" per scegliere DUE modelli differenti. 
 L'applicazione elaborera' il file con entrambi e fondera' i risultati.
-- Algoritmo Ensemble: Puoi scegliere come fondere le tracce (Media, Min, Max, Median).
+- Algoritmo Ensemble: Scegli come fondere le tracce (Media, Min, Max, Median).
 - Consigliato: "avg_wave" (Media) per la massima naturalezza.
 
 5. PRESET ENSEMBLE A CATENA (AVANZATO)
@@ -57,38 +78,40 @@ PRESET DISPONIBILI:
 - De-Reverb Vocali: Separa le Voci, poi isola la voce rimuovendo riverbero ed eco.
 - Ultimate Stems (7 Tracce): Estrae Voci e Base, poi divide la base in 5 tracce 
   (Basso, Batteria, Piano, Chitarra, Other) e salva anche uno stelo "_Extra".
-- Ultimate Stems + Drum Split: Come sopra, ma divide ulteriormente la batteria 
-  in Cassa, Rullante, Piatti, Tom e altro (oltre 10 tracce totali).
+- Ultimate Stems + Drum Split: Preset a 4 passaggi che separa Voci Lead, Cori,
+  Strumentale, Basso, Piano, Chitarra e scompone le batterie nei loro singoli
+  elementi (Kick, Snare, Hi-Hat, Tom, ecc., per oltre 10 tracce totali).
 - Estrazione Chitarra: Preset specializzato per isolare la chitarra dal resto.
 - Separazione Voce Uomo/Donna: Isola specificamente voci maschili da femminili.
 - Restauro Live: Estrae il rumore del pubblico (Applausi), poi pulisce il 
   restante audio del palco in Voce e Strumentale.
 - Prep Vocale RVC: Estrae la voce Lead pulita per clonazione vocale tramite RVC.
 - Solo Batteria: Isola esclusivamente le batterie, eliminando tutti gli altri strumenti.
+- Solo Batteria + Accompagnamento: Estrae la batteria (_Drums) e unisce il resto
+  degli strumenti in un file di accompagnamento unico (_No_Drums).
 
-6. OPZIONI DI OUTPUT E PULIZIA (v1.4)
+6. OPZIONI DI OUTPUT E PULIZIA
 -------------------------------------------------------------------------------
-- Usa sottocartella: (Predefinito) Crea una cartella col nome del brano. Se 
-  disattivato, i file verranno messi liberi nella cartella di output.
-- Elimina stem silenziosi: Se attivo, il programma controlla se gli stem 
-  generati sono vuoti o molto silenziosi (sotto -50 dB) e li elimina per 
-  tenere pulita la cartella.
-- Ascolta Stem: Dopo la separazione, clicca su questo pulsante per scegliere 
-  uno degli stem appena creati e ascoltarlo istantaneamente nel player di sistema.
+- Usa sottocartella: Crea una cartella col nome del brano. Se disattivato, 
+  i file verranno messi liberi nella cartella di output.
+- Elimina stem silenziosi: Se attivo, il programma elimina gli stem generati 
+  molto silenziosi (sotto -50 dB) per tenere pulita la cartella.
+- Ascolta Stem: Clicca per riprodurre direttamente gli stem appena creati 
+  nel tuo lettore multimediale predefinito.
 
 7. CHUNKING (FILE LUNGHI / PREVENZIONE OUT-OF-MEMORY)
 -------------------------------------------------------------------------------
 Se riscontri crash con file molto lunghi o hai poca memoria video:
-- Spunta "Abilita Chunking" e seleziona la dimensione (es. 2 min).
+- Spunta "Abilita Chunking" e seleziona la dimensione del blocco (es. 2 min).
 
 8. ELABORAZIONE IN BATCH (MULTI-FILE E CARTELLE)
 -------------------------------------------------------------------------------
 Puoi elaborare molteplici file audio automaticamente trascinandoli o usando i 
-pulsanti "Sfoglia" e "Seleziona Cartella".
+pulsanti "Sfoglia" e "Seleziona Cartella" come sorgente.
 
 9. NOTE TECNICHE E SUFFISSI
 -------------------------------------------------------------------------------
 I file di output avranno nomi chiari come:
-_Vocals, _Instrumental, _Lead, _Backing, _DeReverb, _Other, _Extra, _Drums.
+_Vocals, _Instrumental, _Lead, _Backing, _DeReverb, _Other, _Extra, _Drums, _No_Drums.
 
 ===============================================================================

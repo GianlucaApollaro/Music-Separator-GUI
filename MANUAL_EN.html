@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Separator - User Manual</title>
+    <style>
+        :root {
+            --bg-color: #f8fafc;
+            --text-color: #334155;
+            --heading-color: #0f172a;
+            --primary-color: #4f46e5;
+            --primary-hover: #4338ca;
+            --card-bg: #ffffff;
+            --border-color: #e2e8f0;
+            --code-bg: #1e293b;
+            --code-text: #f8fafc;
+            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #0f172a;
+                --text-color: #cbd5e1;
+                --heading-color: #f8fafc;
+                --primary-color: #6366f1;
+                --primary-hover: #4f46e5;
+                --card-bg: #1e293b;
+                --border-color: #334155;
+                --code-bg: #0f172a;
+                --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.2), 0 2px 4px -2px rgb(0 0 0 / 0.2);
+            }
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, #4f46e5, #06b6d4);
+            color: white;
+            border-radius: 16px;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow);
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2.2rem;
+            font-weight: 800;
+        }
+
+        header p {
+            margin: 10px 0 0 0;
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .download-box {
+            text-align: center;
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow);
+        }
+
+        .download-btn {
+            display: inline-block;
+            background-color: var(--primary-color);
+            color: white !important;
+            padding: 12px 28px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: background-color 0.2s, transform 0.1s;
+            box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.4);
+        }
+
+        .download-btn:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .download-btn:active {
+            transform: translateY(0);
+        }
+
+        h2 {
+            color: var(--heading-color);
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 8px;
+            margin-top: 40px;
+            font-size: 1.6rem;
+        }
+
+        h3 {
+            color: var(--heading-color);
+            font-size: 1.2rem;
+            margin-top: 20px;
+        }
+
+        a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        ul, ol {
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        code {
+            font-family: Fira Code, Consolas, Monaco, monospace;
+            background-color: var(--code-bg);
+            color: var(--code-text);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        pre {
+            background-color: var(--code-bg);
+            color: var(--code-text);
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: Fira Code, Consolas, Monaco, monospace;
+            font-size: 0.9rem;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+        }
+
+        .index-box {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .index-box h3 {
+            margin-top: 0;
+        }
+
+        .index-list {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            list-style-type: none;
+            padding: 0;
+        }
+
+        @media (max-width: 600px) {
+            .index-list {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .badge {
+            display: inline-block;
+            background-color: var(--primary-color);
+            color: white;
+            padding: 3px 8px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            border-radius: 9999px;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Music Separator</h1>
+            <p>User Manual - v1.5</p>
+        </header>
+
+        <div class="download-box">
+            <h3>Download the Latest Version</h3>
+            <p>Music separator is updated frequently with new models and features.</p>
+            <a href="https://github.com/GianlucaApollaro/Music-Separator-GUI/releases/latest" class="download-btn" target="_blank">Go to Official Download</a>
+        </div>
+
+        <div class="index-box">
+            <h3>Table of Contents</h3>
+            <ul class="index-list">
+                <li><a href="#installation">1. Installation</a></li>
+                <li><a href="#new-features">2. What's New in v1.5</a></li>
+                <li><a href="#basic-usage">3. Basic Usage (Single Model)</a></li>
+                <li><a href="#ensemble">4. Native Ensemble</a></li>
+                <li><a href="#presets">5. Chained Ensemble Presets</a></li>
+                <li><a href="#output">6. Output Options & Cleanup</a></li>
+                <li><a href="#chunking">7. Chunking (OOM Prevention)</a></li>
+                <li><a href="#batch">8. Batch Processing</a></li>
+                <li><a href="#technical">9. Technical Notes & Suffixes</a></li>
+            </ul>
+        </div>
+
+        <section id="installation">
+            <h2>1. Installation</h2>
+            
+            <div class="card">
+                <h3>Windows (CPU or GPU)</h3>
+                <p>If you downloaded the standalone precompiled version:</p>
+                <ol>
+                    <li>Download the archive format <code>.7z</code> suitable for your machine (<strong>GPU</strong> version for NVIDIA CUDA graphics cards, or <strong>CPU</strong> version for other cards or processors).</li>
+                    <li>Extract the archive using a tool like 7-Zip.</li>
+                    <li>Launch the application directly by clicking on <code>Music separator.exe</code> (GPU) or <code>Music separator CPU.exe</code> (CPU).</li>
+                </ol>
+                <p>If you are installing from source code:</p>
+                <ul>
+                    <li>Run <code>install.bat</code> (or <code>install_cpu.bat</code>) to create the Python virtual environment and download dependencies.</li>
+                    <li>Run <code>run.bat</code> (or <code>run_Cpu.bat</code>) to launch the program.</li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h3>macOS (Apple Silicon M1/M2/M3/M4)</h3>
+                <ol>
+                    <li>Download the Mac package in <code>.zip</code> format.</li>
+                    <li>Extract the archive and move the <code>Music separator.app</code> folder to your <code>/Applications</code> folder.</li>
+                    <li>Right-click on the application and select <strong>Open</strong> (only required for the first launch to bypass Apple Gatekeeper's security checks).</li>
+                </ol>
+                <p><strong>Note:</strong> FFmpeg is included in the package. If you encounter permission blocks, open your Terminal and run:</p>
+                <pre>xattr -cr "/Applications/Music separator.app"</pre>
+            </div>
+        </section>
+
+        <section id="new-features">
+            <h2>2. What's New in v1.5 <span class="badge">New</span></h2>
+            <div class="card">
+                <ul>
+                    <li><strong>Enable Preview:</strong> A convenient checkbox that, when ticked, cuts and separates a 30-second portion of the audio (you can choose between the <strong>first 30 seconds</strong> or the <strong>final 30 seconds</strong> via the dropdown selector that appears next to it). The generated stems are saved in a dedicated folder named <code>previews</code> at the same level as your selected output folder. Great for quickly testing model quality on your tracks.</li>
+                    <li><strong>Bandit &amp; SCNet Support:</strong> Added full support for loading and separating audio with the new state-of-the-art <strong>Bandit v2</strong>, <strong>Bandit Plus</strong>, and <strong>SCNet</strong> architectures directly in the GUI. Features automated model source code fetching and lightweight runtime mocking to keep dependencies clean.</li>
+                    <li><strong>Only Drums + Backing Preset:</strong> Introduced the option to mix all non-selected stems into a single output file for single models. This enabled the new <code>preset_drums_no_drums</code> preset, which isolates <code>_Drums</code> and merges everything else into <code>_No_Drums</code>.</li>
+                    <li><strong>Integrated Auto-Updater:</strong> Music separator now includes an automatic update system. At application startup (or manually via <code>Help</code> -> <code>Check for updates...</code>), the program checks for a new release on GitHub. If available, it downloads and installs it in one click without altering your settings or logs.</li>
+                    <li><strong>Automatic Pre-Processing:</strong>
+                        <ul>
+                            <li><em>Normalization:</em> Input audio is automatically normalized to a -0.1 dBFS peak before processing to maximize the AI models' output quality.</li>
+                            <li><em>Stereo Downmix:</em> Multi-channel files (e.g. 5.1, 7.1) are automatically downmixed to stereo to prevent AI model crashes.</li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="basic-usage">
+            <h2>3. Basic Usage (Single Model)</h2>
+            <p>To start a classic separation with a single model:</p>
+            <ol>
+                <li>Drag and drop or browse your input file in the <strong>Input Audio File</strong> field.</li>
+                <li>Select an <strong>Output Directory</strong>.</li>
+                <li>Click on the <strong>Model</strong> field to open the tree picker and select a model (e.g. from the *Favorites* or *Vocal/Inst* categories).</li>
+                <li>Select the output format (WAV, FLAC, or MP3 at 320kbps).</li>
+                <li>Click on <strong>Start Separation</strong>.</li>
+            </ol>
+        </section>
+
+        <section id="ensemble">
+            <h2>4. Native Ensemble (Mixing Two Models)</h2>
+            <p>Check the <strong>Enable Ensemble</strong> box to combine the outputs of two different models:</p>
+            <ul>
+                <li>Choose the primary model (Model 1) and the secondary model (Model 2).</li>
+                <li>Choose the <strong>Ensemble Algorithm</strong> to blend the waveforms (e.g. <code>avg_wave</code> to average the tracks, <code>min_wave</code>, <code>max_wave</code>, or <code>median_wave</code>).</li>
+                <li><em>Recommended:</em> The default <code>avg_wave</code> option generally produces the cleanest and most natural stems.</li>
+            </ul>
+        </section>
+
+        <section id="presets">
+            <h2>5. Chained Ensemble Presets (Advanced)</h2>
+            <p>The <strong>Preset</strong> dropdown allows you to run complex multi-model processes where the output of one separation is automatically fed into another model for further cleaning or stem split.</p>
+            <div class="card">
+                <p>Available chained presets include:</p>
+                <ul>
+                    <li><strong>Vocal Split:</strong> Separates instrumental and vocals, then splits the vocal track into Lead vocals and Backing vocals.</li>
+                    <li><strong>Vocal De-Reverb:</strong> Extracts vocals and automatically removes background reverb and echo.</li>
+                    <li><strong>Ultimate Stems (7 Tracks):</strong> Extracts vocals and instrumental, then splits the instrumental track into 5 stems (Bass, Drums, Piano, Guitar, Other) and saves an extra <code>_Extra</code> file.</li>
+                    <li><strong>Ultimate Stems + Drum Split:</strong> Powered by the new 4-pass engine, it separates Lead vocals, Backing vocals, and splits the instrumental track into Bass, Piano, Guitar, and splits the drums into individual components (Kick, Snare, Cymbals, Toms, etc., for over 10 output files).</li>
+                    <li><strong>Guitar Extraction:</strong> Preset optimized to isolate lead/rhythm guitars from the rest of the song.</li>
+                    <li><strong>Male/Female Split:</strong> Splits the vocal track specifically isolating male vs. female voices.</li>
+                    <li><strong>Live Restore:</strong> Isolates and extracts crowd noise or applause, then divides the music performance into backing and clean vocals.</li>
+                    <li><strong>RVC Vocal Prep:</strong> Isolates an exceptionally clean Lead vocal track to be used as an RVC training dataset.</li>
+                    <li><strong>Only Drums:</strong> Extracts the drum kit, removing all melodic or vocal elements.</li>
+                    <li><strong>Only Drums + Backing:</strong> Extracts the drum kit (<code>_Drums</code>) and merges all vocals, bass, guitar, piano, and other instruments into a single backing track (<code>_No_Drums</code>).</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="output">
+            <h2>6. Output Options & Cleanup</h2>
+            <ul>
+                <li><strong>Save in subfolder:</strong> If checked, automatically creates a subfolder named after the input song. Recommended for keeping chained/multi-stem outputs organized.</li>
+                <li><strong>Delete silent stems:</strong> If the generated stems are quieter than -50 dB (essentially pure silence), the program automatically deletes them to keep folders clean.</li>
+                <li><strong>Play Stem:</strong> Click this button after separation completes to open a dialog and quickly play any generated stem in your system's default media player.</li>
+            </ul>
+        </section>
+
+        <section id="chunking">
+            <h2>7. Chunking (Out-of-Memory Prevention)</h2>
+            <p>If you experience application crashes due to full VRAM (graphics card memory) or if you process very long files (e.g. DJ sets):</p>
+            <ul>
+                <li>Check <strong>Enable Chunking</strong>.</li>
+                <li>Select a duration in minutes (e.g. 2 or 5 minutes). The audio will be split into temporary segments, processed in blocks, and seamlessly merged back together.</li>
+            </ul>
+        </section>
+
+        <section id="batch">
+            <h2>8. Batch Processing (Multi-file and Folders)</h2>
+            <p>You can load and process multiple files at the same time:</p>
+            <ul>
+                <li>Use the <strong>Browse</strong> button and select multiple files in the dialog to queue them.</li>
+                <li>Click on <strong>Browse Folder</strong> to load all supported audio files within a directory (and its subdirectories).</li>
+                <li>The interface will display both the overall progress and the current song progress in real time.</li>
+            </ul>
+        </section>
+
+        <section id="technical">
+            <h2>9. Technical Notes & Suffixes</h2>
+            <p>Output files will contain specific suffixes indicating the isolated stem:</p>
+            <ul>
+                <li><code>_Vocals</code>: Combined vocal track.</li>
+                <li><code>_Instrumental</code>: Complete backing track.</li>
+                <li><code>_Lead</code>: Main lead voice.</li>
+                <li><code>_Backing</code>: Backing vocals and choruses.</li>
+                <li><code>_DeReverb</code>: Dry voice without reverb.</li>
+                <li><code>_Drums</code>: Drum kit.</li>
+                <li><code>_No_Drums</code>: Complete backing track excluding the drums.</li>
+                <li><code>_Bass</code>: Bass guitar / synth bass.</li>
+                <li><code>_Guitar</code>: Guitar tracks.</li>
+                <li><code>_Piano</code>: Acoustic / electric piano.</li>
+                <li><code>_Other</code> / <code>_Extra</code>: Synthesizers or uncatalogued elements.</li>
+            </ul>
+        </section>
+    </div>
+</body>
+</html>

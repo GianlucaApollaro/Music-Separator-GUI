@@ -62,7 +62,7 @@ class GuiLogHandler(logging.Handler):
             raise KeyboardInterrupt("Stopped by user")
 
 class SeparationThread(threading.Thread):
-    def __init__(self, parent, input_files, output_dir, model_name, use_gpu=True, output_format="WAV", model_name_2=None, model_name_3=None, preset_config=None, ensemble_algorithm="avg_wave", chunk_duration=None, remove_leading_numbers=False, use_subfolder=True, delete_silent_stems=False):
+    def __init__(self, parent, input_files, output_dir, model_name, use_gpu=True, output_format="WAV", model_name_2=None, model_name_3=None, model_name_4=None, preset_config=None, ensemble_algorithm="avg_wave", chunk_duration=None, remove_leading_numbers=False, use_subfolder=True, delete_silent_stems=False, enable_preview=False, preview_mode="first"):
         super().__init__()
         self.parent = parent
         self.input_files = input_files
@@ -72,14 +72,24 @@ class SeparationThread(threading.Thread):
         self.output_format = output_format
         self.model_name_2 = model_name_2
         self.model_name_3 = model_name_3
+        self.model_name_4 = model_name_4
         self.preset_config = preset_config
         self.ensemble_algorithm = ensemble_algorithm
         self.chunk_duration = chunk_duration
         self.remove_leading_numbers = remove_leading_numbers
         self.use_subfolder = use_subfolder
         self.delete_silent_stems = delete_silent_stems
+        self.enable_preview = enable_preview
+        self.preview_mode = preview_mode
         self._stop_event = threading.Event()
         self.all_output_files = []  # accumulates absolute paths of all generated stems
+
+        if self.enable_preview:
+            parent_dir = os.path.dirname(self.output_dir)
+            if parent_dir:
+                self.output_dir = os.path.join(parent_dir, "previews")
+            else:
+                self.output_dir = "previews"
 
     def run(self):
         try:
@@ -112,6 +122,13 @@ class SeparationThread(threading.Thread):
             logger.addHandler(handler)
 
             self.post_log(i18n.tr("status_initializing", model=self.model_name))
+
+            if self.enable_preview:
+                os.makedirs(self.output_dir, exist_ok=True)
+                if self.preview_mode == "final":
+                    self.post_log("Preview mode active: cutting final 30 seconds of audio.")
+                else:
+                    self.post_log("Preview mode active: cutting first 30 seconds of audio.")
 
             if self.chunk_duration:
                 self.post_log(f"Chunking enabled: {self.chunk_duration}s per segment.")
@@ -227,7 +244,11 @@ class SeparationThread(threading.Thread):
                                 "download_files": list(file_info.keys())
                             }
                             
-                            if model_type == "MDXC" and ("roformer" in friendly_name.lower() or "roformer" in target_file.lower()):
+                            if model_type == "MDXC" and (
+                                "roformer" in friendly_name.lower() or "roformer" in target_file.lower() or
+                                "bandit" in friendly_name.lower() or "bandit" in target_file.lower() or
+                                "scnet" in friendly_name.lower() or "scnet" in target_file.lower()
+                            ):
                                 models[model_type][friendly_name]["is_roformer"] = True
                             
                     # Inject models from downloadable_models_by_file (ensures newly added pcunwa models are found)
@@ -249,12 +270,58 @@ class SeparationThread(threading.Thread):
                                 "filename": filename,
                                 "download_files": list(file_info.keys())
                             }
-                            if model_type == "MDXC" and "roformer" in filename.lower():
+                            if model_type == "MDXC" and (
+                                "roformer" in filename.lower() or
+                                "bandit" in filename.lower() or
+                                "scnet" in filename.lower()
+                            ):
                                 models[model_type][filename]["is_roformer"] = True
                     return models
                 
                 # Apply patch to the instance
                 separator.list_supported_model_files = patched_list_supported_model_files
+
+                original_load_model_wrapper = separator.load_model
+                def patched_load_model_wrapper(model_filename="model_bs_roformer_ep_317_sdr_12.9755.ckpt"):
+                    # Bandit and SCNet are now supported through the loader patch below.
+                    return original_load_model_wrapper(model_filename)
+                
+                separator.load_model = patched_load_model_wrapper
+
+                # Patch load_model_data_from_yaml to route Bandit/SCNet through MDXCSeparator using is_roformer=True
+                original_load_yaml = separator.load_model_data_from_yaml
+                def patched_load_yaml(yaml_config_filename):
+                    model_data = original_load_yaml(yaml_config_filename)
+                    
+                    yaml_lower = yaml_config_filename.lower()
+                    is_bandit_or_scnet = "bandit" in yaml_lower or "scnet" in yaml_lower
+                    if not is_bandit_or_scnet and os.path.exists(yaml_config_filename):
+                        try:
+                            with open(yaml_config_filename, 'r', encoding='utf-8') as yf:
+                                content = yf.read()
+                            if "cls: Bandit" in content or "cls: BaseBandit" in content or "MultiMaskMultiSourceBandSplitRNN" in content:
+                                is_bandit_or_scnet = True
+                            if "cls: SCNet" in content or "type: scnet" in content:
+                                is_scnet = True
+                        except Exception:
+                            pass
+                            
+                    if is_bandit_or_scnet:
+                        model_data["is_roformer"] = True
+                        
+                        # Populate model sub-dict
+                        if "model" not in model_data:
+                            model_data["model"] = {}
+                        elif not isinstance(model_data["model"], dict):
+                            model_data["model"] = {"original_value": model_data["model"]}
+                            
+                        if "stft_hop_length" not in model_data["model"]:
+                            hop = (model_data.get("kwargs", {}).get("hop_length") or 
+                                   model_data.get("model", {}).get("hop_size") or 512)
+                            model_data["model"]["stft_hop_length"] = hop
+                            
+                    return model_data
+                separator.load_model_data_from_yaml = patched_load_yaml
 
                 # --- ROFORMER CONFIG DIRECT-READ PATCH ---
                 # audio-separator has a bug: when loading a YAML that has 'model: { dim: 256, ... }'
@@ -269,6 +336,12 @@ class SeparationThread(threading.Thread):
                 _yaml.SafeLoader.add_constructor(
                     'tag:yaml.org,2002:python/tuple', _tuple_constructor
                 )
+                try:
+                    _yaml.FullLoader.add_constructor(
+                        'tag:yaml.org,2002:python/tuple', _tuple_constructor
+                    )
+                except Exception:
+                    pass
 
                 from audio_separator.separator.roformer.roformer_loader import RoformerLoader
                 from audio_separator.separator.uvr_lib_v5.roformer.mel_band_roformer import MelBandRoformer
@@ -296,6 +369,13 @@ class SeparationThread(threading.Thread):
                     'dereverb_echo_mbr_v2_sdr_dry_13.4843.ckpt':       'config_dereverb_echo_mbr_v2.yaml',
                     # AEmotionStudio Multistem (.safetensors)
                     'bs_roformer_multistem.safetensors':                'bs_roformer_multistem_config.yaml',
+                    # Bandit/SCNet models
+                    'checkpoint-multi_fixed.ckpt':                     'config_dnr_bandit_v2_mus64.yaml',
+                    'model_bandit_plus_dnr_sdr_11.47.ckpt':            'config_dnr_bandit_bsrnn_multi_mus64.yaml',
+                    'scnet_checkpoint_musdb18.ckpt':                   'config_musdb18_scnet.yaml',
+                    'SCNet-large_starrytong_fixed.ckpt':               'config_musdb18_scnet_large_starrytong.yaml',
+                    'model_scnet_sdr_9.3244.ckpt':                      'config_musdb18_scnet_large.yaml',
+                    'model_scnet_ep_54_sdr_9.8051.ckpt':                'config_musdb18_scnet_xl.yaml',
                 }
 
                 # --- PYTORCH 2.6+ WEIGHTS_ONLY FIX (Hardened) ---
@@ -383,6 +463,235 @@ class SeparationThread(threading.Thread):
                                         yaml_filename = f
                                         break
                     
+                    is_bandit = False
+                    is_scnet = False
+                    
+                    if yaml_filename:
+                        yaml_lower = yaml_filename.lower()
+                        if "bandit" in yaml_lower:
+                            is_bandit = True
+                        elif "scnet" in yaml_lower:
+                            is_scnet = True
+                    else:
+                        ckpt_lower = ckpt_filename.lower()
+                        if "bandit" in ckpt_lower:
+                            is_bandit = True
+                        elif "scnet" in ckpt_lower:
+                            is_scnet = True
+                            
+                    yaml_path = None
+                    if yaml_filename:
+                        yaml_path = os.path.join(model_dir_for_patch, yaml_filename)
+                        if not os.path.exists(yaml_path):
+                            yaml_path = yaml_filename
+                    else:
+                        # Fallback candidate
+                        base_ckpt = os.path.splitext(ckpt_filename)[0]
+                        candidate = os.path.join(os.path.dirname(model_path), f"{base_ckpt}.yaml")
+                        if os.path.exists(candidate):
+                            yaml_path = candidate
+
+                    if yaml_path and os.path.exists(yaml_path):
+                        try:
+                            with open(yaml_path, 'r', encoding='utf-8') as yf:
+                                content = yf.read()
+                            if "cls: Bandit" in content or "cls: BaseBandit" in content or "MultiMaskMultiSourceBandSplitRNN" in content:
+                                is_bandit = True
+                            if "cls: SCNet" in content or "type: scnet" in content:
+                                is_scnet = True
+                        except Exception:
+                            pass
+
+                    if is_bandit or is_scnet:
+                        try:
+                            _log.info(f"[Patch] Loading ZFTurbo architecture for {ckpt_filename}...")
+                            
+                            import zipfile, shutil, requests, sys
+                            from gui.utils import get_app_data_dir
+                            app_data = get_app_data_dir()
+                            dest_dir = os.path.join(app_data, "models_src")
+                            models_dir = os.path.join(dest_dir, "models")
+                            
+                            if not os.path.exists(models_dir):
+                                _log.info("ZFTurbo models directory not found locally. Fetching architecture from Github...")
+                                os.makedirs(dest_dir, exist_ok=True)
+                                zip_path = os.path.join(dest_dir, "repo.zip")
+                                url = "https://github.com/ZFTurbo/Music-Source-Separation-Training/archive/refs/heads/main.zip"
+                                response = requests.get(url, timeout=45, stream=True)
+                                response.raise_for_status()
+                                with open(zip_path, 'wb') as f:
+                                    shutil.copyfileobj(response.raw, f)
+                                    
+                                _log.info("Extracting ZFTurbo model files...")
+                                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                                    first_member = zip_ref.namelist()[0]
+                                    root_dir = first_member.split('/')[0] + '/'
+                                    prefix = root_dir + "models/"
+                                    for member in zip_ref.namelist():
+                                        if member.startswith(prefix):
+                                            rel_path = member[len(root_dir):]
+                                            target_path = os.path.join(dest_dir, rel_path)
+                                            if member.endswith('/'):
+                                                os.makedirs(target_path, exist_ok=True)
+                                            else:
+                                                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                                                with zip_ref.open(member) as source, open(target_path, 'wb') as target:
+                                                    shutil.copyfileobj(source, target)
+                                try:
+                                    os.remove(zip_path)
+                                except Exception:
+                                    pass
+                                _log.info("ZFTurbo architecture successfully initialized.")
+                                
+                            abs_dest_dir = os.path.abspath(dest_dir)
+                            if abs_dest_dir not in sys.path:
+                                sys.path.insert(0, abs_dest_dir)
+                                
+                            # Mock pytorch_lightning, torchmetrics, asteroid
+                            if 'pytorch_lightning' not in sys.modules:
+                                import types
+                                pl = types.ModuleType("pytorch_lightning")
+                                pl.LightningModule = torch.nn.Module
+                                pl.LightningDataModule = object
+                                pl_utils = types.ModuleType("pytorch_lightning.utilities")
+                                pl_utils_types = types.ModuleType("pytorch_lightning.utilities.types")
+                                pl_utils_types.STEP_OUTPUT = None
+                                sys.modules['pytorch_lightning'] = pl
+                                sys.modules['pytorch_lightning.utilities'] = pl_utils
+                                sys.modules['pytorch_lightning.utilities.types'] = pl_utils_types
+                                
+                            if 'torchmetrics' not in sys.modules:
+                                import types
+                                class DummyTM(types.ModuleType):
+                                    def __init__(self, name):
+                                        super().__init__(name)
+                                        self.Metric = torch.nn.Module
+                                        class DummyMetricCollection:
+                                            def __init__(self, *args, **kwargs):
+                                                pass
+                                        self.MetricCollection = DummyMetricCollection
+                                    def __getattr__(self, name):
+                                        if name.startswith('__'):
+                                            raise AttributeError(name)
+                                        if name[0].isupper():
+                                            return torch.nn.Module
+                                        return lambda *args, **kwargs: None
+                                        
+                                tm = DummyTM("torchmetrics")
+                                tm_functional = DummyTM("torchmetrics.functional")
+                                sys.modules['torchmetrics'] = tm
+                                sys.modules['torchmetrics.functional'] = tm_functional
+                                
+                            if 'asteroid' not in sys.modules:
+                                class DummyAsteroid:
+                                    class losses:
+                                        pass
+                                sys.modules['asteroid'] = DummyAsteroid
+                                
+                            if 'spafe' not in sys.modules:
+                                import types
+                                spafe_mod = types.ModuleType("spafe")
+                                spafe_fbanks = types.ModuleType("spafe.fbanks")
+                                spafe_fbanks_bark = types.ModuleType("spafe.fbanks.bark_fbanks")
+                                spafe_utils = types.ModuleType("spafe.utils")
+                                spafe_utils_conv = types.ModuleType("spafe.utils.converters")
+                                
+                                spafe_fbanks_bark.bark_filter_banks = lambda *args, **kwargs: (None, None)
+                                spafe_utils_conv.erb2hz = lambda *args, **kwargs: None
+                                spafe_utils_conv.hz2bark = lambda *args, **kwargs: None
+                                spafe_utils_conv.hz2erb = lambda *args, **kwargs: None
+                                
+                                spafe_mod.fbanks = spafe_fbanks
+                                spafe_fbanks.bark_fbanks = spafe_fbanks_bark
+                                spafe_mod.utils = spafe_utils
+                                spafe_utils.converters = spafe_utils_conv
+                                
+                                sys.modules['spafe'] = spafe_mod
+                                sys.modules['spafe.fbanks'] = spafe_fbanks
+                                sys.modules['spafe.fbanks.bark_fbanks'] = spafe_fbanks_bark
+                                sys.modules['spafe.utils'] = spafe_utils
+                                sys.modules['spafe.utils.converters'] = spafe_utils_conv
+
+                            if 'pedalboard' not in sys.modules:
+                                import types
+                                pb_mod = types.ModuleType("pedalboard")
+                                class DummyReverb:
+                                    def __init__(self, *args, **kwargs): pass
+                                    def process(self, *args, **kwargs): pass
+                                pb_mod.Reverb = DummyReverb
+                                sys.modules['pedalboard'] = pb_mod
+
+                            if 'torch_audiomentations' not in sys.modules:
+                                import types
+                                class DummyTAM(types.ModuleType):
+                                    def __getattr__(self, name):
+                                        if name.startswith('__'):
+                                            raise AttributeError(name)
+                                        return lambda *args, **kwargs: None
+                                sys.modules['torch_audiomentations'] = DummyTAM("torch_audiomentations")
+
+                            with open(yaml_path, 'r', encoding='utf-8') as yf:
+                                raw_yaml = _yaml.load(yf, Loader=_yaml.FullLoader)
+                                
+                            if 'model' in raw_yaml and isinstance(raw_yaml['model'], dict):
+                                model_kwargs = raw_yaml['model']
+                            elif 'kwargs' in raw_yaml and isinstance(raw_yaml['kwargs'], dict):
+                                model_kwargs = raw_yaml['kwargs']
+                            else:
+                                model_kwargs = raw_yaml
+                                
+                            # Clean constructor args defensively
+                            for k in list(model_kwargs.keys()):
+                                if k in ['cls', 'type']:
+                                    del model_kwargs[k]
+                                    
+                            if is_bandit:
+                                if "MultiMaskMultiSourceBandSplitRNN" in str(raw_yaml):
+                                    from models.bandit.core.model import MultiMaskMultiSourceBandSplitRNNSimple
+                                    model = MultiMaskMultiSourceBandSplitRNNSimple(**model_kwargs)
+                                else:
+                                    from models.bandit_v2.bandit import Bandit
+                                    model = Bandit(**model_kwargs)
+                            else:  # is_scnet
+                                if "scnet_masked" in yaml_path.lower() or "SCNetMasked" in str(raw_yaml):
+                                    from models.scnet.scnet_masked import SCNetMasked
+                                    model = SCNetMasked(**model_kwargs)
+                                elif "scnet_tran" in yaml_path.lower() or "SCNetTran" in str(raw_yaml):
+                                    from models.scnet.scnet_tran import SCNetTran
+                                    model = SCNetTran(**model_kwargs)
+                                else:
+                                    from models.scnet.scnet import SCNet
+                                    model = SCNet(**model_kwargs)
+                                    
+                            checkpoint = torch.load(model_path, map_location='cpu')
+                            state_dict = checkpoint.get('state_dict', checkpoint.get('model', checkpoint))
+                            
+                            new_state_dict = {}
+                            for k, v in state_dict.items():
+                                if k.startswith("model."):
+                                    new_state_dict[k[6:]] = v
+                                else:
+                                    new_state_dict[k] = v
+                                    
+                            model.load_state_dict(new_state_dict)
+                            model.to(device).eval()
+                            
+                            from audio_separator.separator.roformer.model_loading_result import ModelLoadingResult, ImplementationVersion
+                            from ml_collections import ConfigDict
+                            cfg = ConfigDict(patched_load_yaml(yaml_path))
+                            
+                            result = ModelLoadingResult.success_result(
+                                model=model,
+                                implementation=ImplementationVersion.NEW,
+                                config=cfg,
+                            )
+                            _log.info(f"[Patch] ZFTurbo model loaded successfully for {ckpt_filename}!")
+                            return result
+                            
+                        except Exception as e:
+                            _log.error(f"[Patch] Failed to load ZFTurbo model for {ckpt_filename}: {e}", exc_info=True)
+                            raise RuntimeError(f"Could not load custom model {ckpt_filename}: {e}") from e
+
                     if yaml_filename:
                         yaml_path = os.path.join(model_dir_for_patch, yaml_filename)
                         if os.path.exists(yaml_path):
@@ -603,8 +912,16 @@ class SeparationThread(threading.Thread):
                 
                 try:
                     # -ac 2: downmix any multi-channel audio (e.g. 5.1) to stereo; no effect if already stereo/mono
+                    if self.enable_preview and self.preview_mode == "final":
+                        ffmpeg_cmd = ['ffmpeg', '-y', '-sseof', '-30', '-i', current_input_file, '-vn', '-ac', '2', safe_input_file]
+                    else:
+                        ffmpeg_cmd = ['ffmpeg', '-y', '-i', current_input_file, '-vn', '-ac', '2']
+                        if self.enable_preview:
+                            ffmpeg_cmd += ['-t', '30']
+                        ffmpeg_cmd.append(safe_input_file)
+                    
                     subprocess.run(
-                        ['ffmpeg', '-y', '-i', current_input_file, '-vn', '-ac', '2', safe_input_file],
+                        ffmpeg_cmd,
                         check=True, capture_output=True
                     )
                 except Exception as e:
@@ -653,9 +970,9 @@ class SeparationThread(threading.Thread):
 
                 if self.preset_config:
                     preset_type = self.preset_config.get("type", "chain")
-
                     if preset_type == "single":
                         # ====== PRESET SINGLE MODEL (Filter/Rename Stems) ======
+                        import soundfile as sf
                         from gui.audio_utils import stem_from_filename
                         self.post_log(i18n.tr("status_loading"))
                         separator.load_model(model_filename=self.preset_config["model_1"])
@@ -670,15 +987,20 @@ class SeparationThread(threading.Thread):
                         
                         final_outputs = []
                         rename_map = self.preset_config.get("rename_map", {})
+                        mix_remaining_to = self.preset_config.get("mix_remaining_to")
+                        
+                        clean_ext = ".wav"
+                        if m1_outputs:
+                            clean_ext = os.path.splitext(m1_outputs[0])[1]
+                            
+                        paths_to_mix = []
                         
                         for f in m1_outputs:
                             stem = stem_from_filename(f)
-                            clean_ext = os.path.splitext(f)[1]
                             old_path = os.path.join(file_output_dir, f)
                             
                             if stem in rename_map:
                                 suffix = rename_map[stem].lstrip('_')
-                                # Prepend original filename if not using subfolders
                                 if not self.use_subfolder:
                                     new_name = f"{folder_name}_{suffix}{clean_ext}"
                                 else:
@@ -690,10 +1012,48 @@ class SeparationThread(threading.Thread):
                                 os.rename(old_path, new_path)
                                 final_outputs.append(new_name)
                             else:
-                                # Delete unwanted stems
-                                if os.path.exists(old_path):
-                                    os.remove(old_path)
-                        
+                                if mix_remaining_to:
+                                    paths_to_mix.append(old_path)
+                                else:
+                                    if os.path.exists(old_path):
+                                        os.remove(old_path)
+                                        
+                        if mix_remaining_to and paths_to_mix:
+                            self.post_log(i18n.tr("status_ensemble_mixing") or "Mixing remaining stems...")
+                            mixed_data = None
+                            samplerate = None
+                            
+                            for path in paths_to_mix:
+                                if os.path.exists(path):
+                                    data, sr = sf.read(path)
+                                    if samplerate is None:
+                                        samplerate = sr
+                                    if mixed_data is None:
+                                        mixed_data = data
+                                    else:
+                                        min_len = min(len(mixed_data), len(data))
+                                        mixed_data = mixed_data[:min_len] + data[:min_len]
+                                        
+                            if mixed_data is not None and samplerate is not None:
+                                suffix = mix_remaining_to.lstrip('_')
+                                if not self.use_subfolder:
+                                    mix_name = f"{folder_name}_{suffix}{clean_ext}"
+                                else:
+                                    mix_name = f"{suffix}{clean_ext}"
+                                    
+                                mix_path = os.path.join(file_output_dir, mix_name)
+                                if os.path.exists(mix_path):
+                                    os.remove(mix_path)
+                                sf.write(mix_path, mixed_data, samplerate)
+                                final_outputs.append(mix_name)
+                                
+                            for path in paths_to_mix:
+                                if os.path.exists(path):
+                                    try:
+                                        os.remove(path)
+                                    except Exception:
+                                        pass
+                                        
                         output_files = final_outputs
 
                     elif preset_type == "ensemble":
@@ -856,7 +1216,6 @@ class SeparationThread(threading.Thread):
                                 else:
                                     shutil.copy(os.path.join(temp_dir_2, f2), final_path)
                                     final_outputs.append(out_name)
-
                             if pass_file_path_2 and self.model_name_3:
                                 # Model 3
                                 temp_dir_3 = tempfile.mkdtemp(dir=self.output_dir, prefix="chain_3_")
@@ -872,14 +1231,20 @@ class SeparationThread(threading.Thread):
                                 finally:
                                     sys.stderr = old_stderr
                                 
+                                pass_file_path_3 = None
+                                pass_stem_3 = self.preset_config.get("pass_stem_3", "").lower()
+                                rename_map_3 = self.preset_config.get("m3_rename_map", {})
+                                
                                 for f3 in output_files_3:
                                     stem3 = stem_from_filename(f3)
                                     clean_ext = os.path.splitext(f3)[1]
                                     
-                                    rename_map_3 = self.preset_config.get("m3_rename_map", {})
+                                    stem_match_3 = (pass_stem_3 != "" and (stem3 == pass_stem_3 or (stem3 in ["other", "instrumental"] and pass_stem_3 in ["other", "instrumental"])))
+                                    
                                     if stem3 in rename_map_3:
                                         suffix = rename_map_3[stem3]
-                                        if suffix is None: continue
+                                        if suffix is None:
+                                            continue
                                     else:
                                         suffix = f"_{stem3.capitalize()}"
                                     
@@ -888,11 +1253,55 @@ class SeparationThread(threading.Thread):
                                         out_name = f"{folder_name}_{suffix}{clean_ext}"
                                     else:
                                         out_name = f"{suffix}{clean_ext}"
-                                    
                                     final_path = os.path.join(file_output_dir, out_name)
-                                    shutil.copy(os.path.join(temp_dir_3, f3), final_path)
-                                    final_outputs.append(out_name)
+                                    
+                                    if stem_match_3:
+                                        pass_file_path_3 = os.path.join(temp_dir_3, f3)
+                                        if "m3_keep_pass_stem_name" in self.preset_config or stem3 in rename_map_3:
+                                            shutil.copy(os.path.join(temp_dir_3, f3), final_path)
+                                            final_outputs.append(out_name)
+                                    else:
+                                        shutil.copy(os.path.join(temp_dir_3, f3), final_path)
+                                        final_outputs.append(out_name)
                                 
+                                if pass_file_path_3 and self.model_name_4:
+                                    # Model 4
+                                    temp_dir_4 = tempfile.mkdtemp(dir=self.output_dir, prefix="chain_4_")
+                                    self.post_progress(0)
+                                    self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 4: {self.model_name_4})")
+                                    separator.output_dir = temp_dir_4
+                                    separator.load_model(model_filename=self.model_name_4)
+                                    
+                                    old_stderr = sys.stderr
+                                    sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
+                                    try:
+                                        output_files_4 = separator.separate(pass_file_path_3)
+                                    finally:
+                                        sys.stderr = old_stderr
+                                        
+                                    for f4 in output_files_4:
+                                        stem4 = stem_from_filename(f4)
+                                        clean_ext = os.path.splitext(f4)[1]
+                                        
+                                        rename_map_4 = self.preset_config.get("m4_rename_map", {})
+                                        if stem4 in rename_map_4:
+                                            suffix = rename_map_4[stem4]
+                                            if suffix is None:
+                                                continue
+                                        else:
+                                            suffix = f"_{stem4.capitalize()}"
+                                            
+                                        suffix = suffix.lstrip('_')
+                                        if not self.use_subfolder:
+                                            out_name = f"{folder_name}_{suffix}{clean_ext}"
+                                        else:
+                                            out_name = f"{suffix}{clean_ext}"
+                                        final_path = os.path.join(file_output_dir, out_name)
+                                        shutil.copy(os.path.join(temp_dir_4, f4), final_path)
+                                        final_outputs.append(out_name)
+                                        
+                                    shutil.rmtree(temp_dir_4, ignore_errors=True)
+                                    
                                 shutil.rmtree(temp_dir_3, ignore_errors=True)
                         else:
                             self.post_log(f"Warning: Could not find '{pass_stem}' stem from Pass 1 to feed into Pass 2.")

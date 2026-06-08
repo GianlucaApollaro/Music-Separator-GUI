@@ -25,6 +25,7 @@ models/*.safetensors
 # Audio Output
 output/
 separated/
+previews/
 
 # Build artifacts
 build/
@@ -60,3 +61,6 @@ release_notes_*.md
 # Publishing scripts
 publish_*.bat
 commit_*.bat
+
+# Runtime downloaded model sources
+models_src/

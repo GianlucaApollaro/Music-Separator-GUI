@@ -45,6 +45,7 @@
     "preset_crowd_live": "Restauración de Vivo (Público + Voz + Base)",
     "preset_vocal_rvc": "Prep Vocal RVC (Lead Limpia + Reverb + Instrumental/BVs)",
     "preset_only_drums": "Solo Batería (Extracción de solo batería)",
+    "preset_drums_no_drums": "Solo Batería + Acompañamiento (Drums + No Drums)",
     "preset_guitar_specialist": "Extracción de Guitarra (3 Pistas)",
     "ensemble_algorithm": "Algoritmo Ensemble:",
     "ensemble_algorithm_tooltip": "Algoritmo para fusionar los resultados de los dos modelos",
@@ -72,7 +73,24 @@
     "stem_play_dialog_title": "Reproducir un stem generado",
     "stem_play_no_files": "No hay archivos disponibles. Ejecute primero una separación.",
     "status_silent_stem_deleted": "Stem silencioso eliminado: {file}",
-    "status_normalizing": "Normalizando audio de entrada a -0.1 dBFS..."
+    "status_normalizing": "Normalizando audio de entrada a -0.1 dBFS...",
+    "model_search": "Buscar:",
+    "enable_preview": "Habilitar Vista Previa (30 segundos)",
+    "preview_first_30": "Primeros 30 segundos",
+    "preview_final_30": "Últimos 30 segundos",
+    "menu_help": "Ayuda",
+    "menu_check_updates": "Buscar actualizaciones...",
+    "update_checking": "Buscando actualizaciones...",
+    "update_up_to_date": "Music Separator está actualizado (Versión {version}).",
+    "update_available": "¡Hay una nueva actualización disponible!\n\nVersión: {version}\nEdición: {edition}\n\n¿Quieres descargarla e instalarla ahora?",
+    "update_downloading": "Descargando actualización: {percent}%",
+    "update_download_err": "Error al descargar el paquete de actualización.",
+    "update_err": "Ocurrió un error al buscar actualizaciones:\n{error}",
+    "update_no_asset": "No se pudo encontrar un paquete de actualización correspondiente a su edición ({edition}).",
+    "btn_download_install": "Descargar e Instalar",
+    "btn_open_release": "Abrir Página de Lanzamiento",
+    "btn_later": "Más Tarde",
+    "error_unsupported_model": "El modelo '{model}' utiliza la arquitectura '{architecture}', que no es compatible con esta versión de la biblioteca del separador. Seleccione otro modelo (por ejemplo, BS-Roformer, Mel-Roformer, MDX23C o modelos estándar MDX/VR)."
 }
 
 

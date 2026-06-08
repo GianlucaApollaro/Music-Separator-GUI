@@ -57,6 +57,8 @@ macOS (Apple Silicon M1/M2/M3/M4):
 1. Seleccione su archivo de entrada (WAV, FLAC, MP3, MP4, MKV, etc.).
 2. Elija un Directorio de Salida.
 3. Seleccione un Modelo del menú de árbol (categorizado por tipo).
+   Puedes usar la barra de búsqueda en la parte superior del selector para
+   encontrar rápidamente un modelo escribiendo su nombre.
 4. Seleccione el formato de salida (WAV, FLAC o MP3 a 320kbps).
 5. Haz clic en "Iniciar Separacion".
 

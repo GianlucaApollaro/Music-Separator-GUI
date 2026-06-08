@@ -56,6 +56,8 @@ macOS (Apple Silicon M1/M2/M3/M4):
 1. Select your input file (WAV, FLAC, MP3, MP4, MKV, etc.).
 2. Choose an Output Directory.
 3. Select a Model from the tree picker (categorized by type: Vocals, etc.).
+   You can use the search bar at the top of the picker to quickly find a
+   model by typing its name.
 4. Select the output format (WAV, FLAC, or MP3 at 320kbps).
 5. Click "Start Separation".
 

@@ -52,6 +52,7 @@ class MainWindow(wx.Frame):
         # Build per-category display names (strip file extensions)
         raw_categories = self.model_manager.get_model_categories()
         display_categories = {}
+        downloaded_display_names = []
         for category, models in raw_categories.items():
             display_models = []
             seen = set()
@@ -66,8 +67,18 @@ class MainWindow(wx.Frame):
                     self.display_to_file[display_name] = m
                     self.file_to_display[m] = display_name
                     display_models.append(display_name)
+                    # Check if this model is downloaded locally
+                    if self.model_manager.is_model_downloaded(m):
+                        downloaded_display_names.append(display_name)
             if display_models:
                 display_categories[category] = display_models
+
+        # Add "Downloaded Models" category at the top if there are any
+        if downloaded_display_names:
+            downloaded_cat_name = i18n.tr("category_downloaded")
+            new_display_categories = {downloaded_cat_name: downloaded_display_names}
+            new_display_categories.update(display_categories)
+            display_categories = new_display_categories
 
         self.model_list = list(self.display_to_file.keys())
 
@@ -201,16 +212,29 @@ class MainWindow(wx.Frame):
         vbox.Add(hbox_ens_algo, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
 
         # --- Pre-set Selection ---
+        PresetManager.load_custom_presets()
         self.hbox_preset = wx.BoxSizer(wx.HORIZONTAL)
         self.st_preset = wx.StaticText(self.panel, label=i18n.tr("preset_label"))
         self.hbox_preset.Add(self.st_preset, flag=wx.RIGHT|wx.ALIGN_CENTER_VERTICAL, border=25)
         
         self.cb_preset = wx.ComboBox(self.panel, style=wx.CB_DROPDOWN | wx.CB_READONLY)
         for key in PresetManager.preset_keys:
-            self.cb_preset.Append(i18n.tr(key))
+            self.cb_preset.Append(PresetManager.get_preset_name(key, i18n))
         self.cb_preset.SetSelection(config.get("preset", 0))
         self.cb_preset.Bind(wx.EVT_COMBOBOX, self.OnPresetChange)
         self.hbox_preset.Add(self.cb_preset, proportion=1, flag=wx.EXPAND)
+        
+        self.btn_add_preset = wx.Button(self.panel, label=i18n.tr("preset_btn_create"))
+        self.btn_add_preset.SetToolTip(i18n.tr("preset_add_tooltip"))
+        self.btn_add_preset.Bind(wx.EVT_BUTTON, self.OnCreatePreset)
+        self.hbox_preset.Add(self.btn_add_preset, flag=wx.LEFT | wx.ALIGN_CENTER_VERTICAL, border=5)
+        
+        self.btn_delete_preset = wx.Button(self.panel, label="X", size=(28, 28))
+        self.btn_delete_preset.SetToolTip(i18n.tr("preset_delete_tooltip"))
+        self.btn_delete_preset.Bind(wx.EVT_BUTTON, self.OnDeletePreset)
+        self.btn_delete_preset.Disable()
+        self.hbox_preset.Add(self.btn_delete_preset, flag=wx.LEFT | wx.ALIGN_CENTER_VERTICAL, border=5)
+        
         vbox.Add(self.hbox_preset, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
 
         # --- Row 4: Processing Options (GPU & Chunking) ---
@@ -359,7 +383,11 @@ class MainWindow(wx.Frame):
 
     def OnPresetChange(self, event):
         idx = self.cb_preset.GetSelection()
-        preset_key = PresetManager.preset_keys[idx]
+        if idx == wx.NOT_FOUND:
+            preset_key = "preset_none"
+        else:
+            preset_key = PresetManager.preset_keys[idx]
+            
         if preset_key != "preset_none":
             self.cb_model.Disable()
             self.st3.Disable()
@@ -368,6 +396,9 @@ class MainWindow(wx.Frame):
             self.cb_model.Enable()
             self.st3.Enable()
             self.chk_ensemble.Enable()
+            
+        is_custom = preset_key.startswith("custom_")
+        self.btn_delete_preset.Enable(is_custom)
 
     def UpdateLabels(self):
         self.SetTitle(f"{i18n.tr('app_title')} v{__version__}")
@@ -416,17 +447,24 @@ class MainWindow(wx.Frame):
             self.chk_gpu.SetToolTip(i18n.tr("gpu_not_available_tooltip"))
         
         self.st_preset.SetLabel(i18n.tr("preset_label"))
+        if hasattr(self, "btn_add_preset") and self.btn_add_preset:
+            self.btn_add_preset.SetLabel(i18n.tr("preset_btn_create"))
+            self.btn_add_preset.SetToolTip(i18n.tr("preset_add_tooltip"))
+        if hasattr(self, "btn_delete_preset") and self.btn_delete_preset:
+            self.btn_delete_preset.SetToolTip(i18n.tr("preset_delete_tooltip"))
+            
         old_sel = self.cb_preset.GetSelection()
         if old_sel == wx.NOT_FOUND:
             old_sel = 0
         self.cb_preset.Clear()
         for key in PresetManager.preset_keys:
-            self.cb_preset.Append(i18n.tr(key))
+            self.cb_preset.Append(PresetManager.get_preset_name(key, i18n))
         self.cb_preset.SetSelection(old_sel)
         
         # Re-init menu to update labels there too
         self.SetMenuBar(None)
         self.InitMenu()
+        self._populate_model_combobox()
         self.panel.Layout()
 
     def OnLanguageChange(self, lang_code):
@@ -486,6 +524,8 @@ class MainWindow(wx.Frame):
             self.last_output_files = event.output_files
             self.btn_play_stem.Enable()
         if event.success:
+            # Rebuild model categories dynamically to include any newly downloaded model
+            self._populate_model_combobox()
             wx.MessageBox(i18n.tr("msg_success"), i18n.tr("msg_success_title"), wx.OK | wx.ICON_INFORMATION)
         else:
             wx.MessageBox(i18n.tr("msg_error"), i18n.tr("msg_error_title"), wx.OK | wx.ICON_ERROR)
@@ -704,3 +744,41 @@ class MainWindow(wx.Frame):
                 event.Veto()
         else:
             event.Skip()
+
+    def OnCreatePreset(self, event):
+        from gui.custom_preset_dialog import CustomPresetDialog
+        model_list = sorted(self.model_manager.get_model_list())
+        dlg = CustomPresetDialog(self, model_list, i18n)
+        if dlg.ShowModal() == wx.ID_OK:
+            created_key = dlg.preset_key
+            PresetManager.load_custom_presets()
+            self.UpdatePresetDropdown(created_key)
+        dlg.Destroy()
+
+    def OnDeletePreset(self, event):
+        idx = self.cb_preset.GetSelection()
+        if idx == wx.NOT_FOUND:
+            return
+        preset_key = PresetManager.preset_keys[idx]
+        if not preset_key.startswith("custom_"):
+            return
+            
+        preset_name = PresetManager.get_preset_name(preset_key, i18n)
+        confirm_msg = i18n.tr("preset_delete_confirm").format(name=preset_name)
+        confirm_title = i18n.tr("preset_delete_confirm_title")
+        
+        if wx.MessageBox(confirm_msg, confirm_title, wx.YES_NO | wx.ICON_QUESTION) == wx.YES:
+            PresetManager.delete_custom_preset(preset_key)
+            PresetManager.load_custom_presets()
+            self.UpdatePresetDropdown("preset_none")
+            
+    def UpdatePresetDropdown(self, select_key="preset_none"):
+        self.cb_preset.Clear()
+        selected_idx = 0
+        for i, key in enumerate(PresetManager.preset_keys):
+            self.cb_preset.Append(PresetManager.get_preset_name(key, i18n))
+            if key == select_key:
+                selected_idx = i
+                
+        self.cb_preset.SetSelection(selected_idx)
+        self.OnPresetChange(None)

@@ -424,6 +424,26 @@ class ModelManager:
             logger.warning("Model catalog not ready yet, returning partial categories.")
         return self.models_dict
 
+    def is_model_downloaded(self, model_name: str) -> bool:
+        """Check if all required files for a model are present locally."""
+        files_to_download = {}
+        if model_name in self.downloadable_models:
+            files_to_download = self.downloadable_models[model_name]
+        elif model_name in self.downloadable_aliases:
+            files_to_download = self.downloadable_aliases[model_name]
+        elif model_name in self.downloadable_models_by_file:
+            files_to_download = self.downloadable_models_by_file[model_name]
+
+        if not files_to_download:
+            dest_path = os.path.join(self.models_dir, model_name)
+            return os.path.exists(dest_path)
+
+        for fname in files_to_download.keys():
+            dest_path = os.path.join(self.models_dir, fname)
+            if not os.path.exists(dest_path):
+                return False
+        return True
+
     def resolve_and_download(self, model_name: str, logger_callback: Callable[[str], None], progress_callback: Callable[[float, float], None]) -> Optional[str]:
         files_to_download = {}
         target_model_filename = model_name

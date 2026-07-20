@@ -1,32 +1,25 @@
 """
-model_tree_picker.py  –  v1.5 (inline tree)
---------------------------------------------
-Accessible inline model selector for Music Separator GUI.
+model_tree_picker.py  –  v1.6 (accessible macOS fallback)
+---------------------------------------------------------
+Accessible model selector for Music Separator GUI.
 
 Layout (vertical, full-width):
   ┌─────────────────────────────────────┐
   │ Cerca: [______________________]     │  ← search TextCtrl  (Tab stop 1)
   │ ┌───────────────────────────────┐   │
-  │ │ Favorites          (expanded) │   │
-  │ │   BS-Roformer-SW   ← leaf     │   │  ← TreeCtrl         (Tab stop 2)
-  │ │   UVR-MDX-NET-…               │   │
-  │ │ De-Reverb / De-Echo (collapsed│   │
-  │ │ Karaoke / Backing Vocals      │   │
+  │ │ [Category] Model Name         │   │  ← ListBox (Mac) or TreeCtrl (Win)
+  │ │ [Category] Another Model      │   │  (Tab stop 2)
   │ └───────────────────────────────┘   │
   └─────────────────────────────────────┘
 
-Screen-reader behaviour (NVDA / JAWS)
---------------------------------------
-- Tab to search field → type to filter → Tab to tree → navigate with arrows.
-- Right arrow : expand category or enter its first child.
-- Left arrow  : collapse category or move to its parent.
-- Up / Down   : move between sibling items.
-- Selecting a MODEL LEAF immediately sets it as the current model
-  (same as a standard listbox – no extra confirmation needed).
-- Categories (bold, no data) are skipped as model selection; only
-  leaf items (model names) update the selection value.
+Accessibility behaviour:
+- Windows/Linux: Renders a `wx.TreeCtrl` (read natively by screen readers like NVDA/JAWS).
+- macOS: Renders a `wx.ListBox` (since `wx.TreeCtrl` is skipped by macOS VoiceOver).
+  Items are prefixed with their category in brackets: `[Category] Model Name`.
+- Selection updates immediately without extra confirmation.
 """
 
+import sys
 import wx
 from gui.i18n_manager import i18n
 
@@ -53,21 +46,12 @@ class ModelTreePicker(wx.Panel):
     """
     Inline, accessible model selector.
 
-    Renders a search TextCtrl on top and a TreeCtrl below, both embedded
-    directly in the parent panel (no popup / no dialog).
-
-    Public API (drop-in compatible with the former ComboBox usage)
-    --------------------------------------------------------------
-    Populate(categories)  – {category: [display_name, ...]} dict
-    GetValue()            – display name of the current model selection
-    SetValue(name)        – programmatically set selection (scrolls to item)
-    Enable() / Disable()
-    Show() / Hide()       – inherited from wx.Panel
-    SetToolTip(str or wx.ToolTip)
-    EVT_MODEL_SELECTED    – fired when the user navigates to a model leaf
+    Renders a search TextCtrl on top and a picker control below.
+    Uses wx.TreeCtrl on Windows/Linux and falls back to a flat wx.ListBox
+    on macOS to ensure screen reader (VoiceOver) compatibility.
     """
 
-    _TREE_HEIGHT = 160   # minimum / initial height of the tree control
+    _TREE_HEIGHT = 160   # minimum / initial height of the control
 
     def __init__(self, parent, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
@@ -76,6 +60,8 @@ class ModelTreePicker(wx.Panel):
         self._enabled = True
         # Prevents EVT_MODEL_SELECTED from firing during Populate / SetValue
         self._programmatic_update = False
+
+        self._is_mac = sys.platform == 'darwin'
 
         outer = wx.BoxSizer(wx.VERTICAL)
 
@@ -90,31 +76,45 @@ class ModelTreePicker(wx.Panel):
         search_row.Add(self.search, proportion=1, flag=wx.EXPAND)
         outer.Add(search_row, flag=wx.EXPAND | wx.BOTTOM, border=3)
 
-        # ── Tree control ──────────────────────────────────────────────────────
-        self.tree = wx.TreeCtrl(
-            self,
-            size=(-1, self._TREE_HEIGHT),
-            style=(wx.TR_DEFAULT_STYLE
-                   | wx.TR_HIDE_ROOT
-                   | wx.TR_SINGLE
-                   | wx.TR_LINES_AT_ROOT),
-        )
-        outer.Add(self.tree, flag=wx.EXPAND)
+        # ── Picker control ────────────────────────────────────────────────────
+        if self._is_mac:
+            self.list_box = wx.ListBox(
+                self,
+                size=(-1, self._TREE_HEIGHT),
+                style=wx.LB_SINGLE
+            )
+            outer.Add(self.list_box, flag=wx.EXPAND)
+            self.tree = None
+        else:
+            self.tree = wx.TreeCtrl(
+                self,
+                size=(-1, self._TREE_HEIGHT),
+                style=(wx.TR_DEFAULT_STYLE
+                       | wx.TR_HIDE_ROOT
+                       | wx.TR_SINGLE
+                       | wx.TR_LINES_AT_ROOT),
+            )
+            outer.Add(self.tree, flag=wx.EXPAND)
+            self.list_box = None
 
         self.SetSizer(outer)
 
         # ── Bindings ──────────────────────────────────────────────────────────
-        self.tree.Bind(wx.EVT_TREE_SEL_CHANGED, self._on_sel_changed)
+        if self._is_mac:
+            self.list_box.Bind(wx.EVT_LISTBOX, self._on_list_selected)
+        else:
+            self.tree.Bind(wx.EVT_TREE_SEL_CHANGED, self._on_sel_changed)
+
         self.search.Bind(wx.EVT_TEXT, self._on_search)
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
     def Populate(self, categories: dict):
-        """Feed category-grouped display names and rebuild the tree."""
+        """Feed category-grouped display names and rebuild the picker."""
         self._categories = categories
         self._programmatic_update = True
-        self._rebuild_tree(self._value)
+        self._rebuild_control(self._value)
         self._programmatic_update = False
 
     def GetValue(self) -> str:
@@ -122,17 +122,20 @@ class ModelTreePicker(wx.Panel):
         return self._value
 
     def SetValue(self, value: str):
-        """Select a model by display name and scroll to it in the tree."""
+        """Select a model by display name and scroll to it."""
         self._value = value
         self._programmatic_update = True
-        self._rebuild_tree(value, self.search.GetValue())
+        self._rebuild_control(value, self.search.GetValue())
         self._programmatic_update = False
 
     def Enable(self, enable: bool = True):
         self._enabled = enable
         self._lbl_search.Enable(enable)
         self.search.Enable(enable)
-        self.tree.Enable(enable)
+        if self._is_mac:
+            self.list_box.Enable(enable)
+        else:
+            self.tree.Enable(enable)
         super().Enable(enable)
 
     def Disable(self):
@@ -145,7 +148,10 @@ class ModelTreePicker(wx.Panel):
         """Accept both a plain string and a wx.ToolTip object."""
         if isinstance(tip, str):
             tip = wx.ToolTip(tip)
-        self.tree.SetToolTip(tip)
+        if self._is_mac:
+            self.list_box.SetToolTip(tip)
+        else:
+            self.tree.SetToolTip(tip)
 
     def UpdateSearchLabel(self):
         """Refresh the search label text after a language change."""
@@ -153,8 +159,41 @@ class ModelTreePicker(wx.Panel):
         self.Layout()
 
     # ------------------------------------------------------------------
-    # Tree building
+    # Rebuild logic
     # ------------------------------------------------------------------
+    def _rebuild_control(self, current_value: str, filter_text: str = ""):
+        """Dispatch rebuild based on the current platform control."""
+        if self._is_mac:
+            self._rebuild_list_box(current_value, filter_text)
+        else:
+            self._rebuild_tree(current_value, filter_text)
+
+    def _rebuild_list_box(self, current_value: str, filter_text: str = ""):
+        """Rebuild the flat ListBox applying an optional filter."""
+        self.list_box.Clear()
+
+        filter_lower = filter_text.strip().lower()
+        items_to_add = []
+
+        for category, models in self._categories.items():
+            for display_name in models:
+                if filter_lower and filter_lower not in display_name.lower():
+                    continue
+                # Format: [Category] Model Name
+                item_text = f"[{category}] {display_name}"
+                items_to_add.append((item_text, display_name))
+
+        select_idx = wx.NOT_FOUND
+        for idx, (item_text, display_name) in enumerate(items_to_add):
+            self.list_box.Append(item_text, display_name)
+            if display_name == current_value:
+                select_idx = idx
+
+        if select_idx != wx.NOT_FOUND:
+            self.list_box.SetSelection(select_idx)
+            # Ensure the selected item is scrolled into view if possible
+            # listbox on wxPython automatically handles this or has platform defaults
+
     def _rebuild_tree(self, current_value: str, filter_text: str = ""):
         """Rebuild the TreeCtrl applying an optional filter."""
         self.tree.DeleteAllItems()
@@ -202,12 +241,25 @@ class ModelTreePicker(wx.Panel):
     # ------------------------------------------------------------------
     # Event handlers
     # ------------------------------------------------------------------
-    def _on_sel_changed(self, event):
-        """Update _value when the user navigates to a model leaf.
+    def _on_list_selected(self, event):
+        """Update _value when the user selects a model in the ListBox."""
+        if self._programmatic_update:
+            event.Skip()
+            return
+        idx = event.GetSelection()
+        if idx != wx.NOT_FOUND:
+            data = self.list_box.GetClientData(idx)
+            if data:
+                self._value = data
+                evt = ModelSelectedEvent(
+                    _myEVT_MODEL_SELECTED, self.GetId(), data
+                )
+                evt.SetEventObject(self)
+                self.GetEventHandler().ProcessEvent(evt)
+        event.Skip()
 
-        The EVT_MODEL_SELECTED event is NOT fired during programmatic
-        updates (Populate / SetValue) to avoid spurious callbacks.
-        """
+    def _on_sel_changed(self, event):
+        """Update _value when the user navigates to a model leaf."""
         if self._programmatic_update:
             event.Skip()
             return
@@ -227,13 +279,13 @@ class ModelTreePicker(wx.Panel):
         event.Skip()
 
     def _on_search(self, event):
-        """Filter the tree in real time; return focus to the search field.
+        """Filter the picker in real time; return focus to the search field.
 
-        TreeCtrl.SelectItem() steals focus on Windows, so we restore it
+        Selection shifts might steal focus on Windows, so we restore it
         to the search TextCtrl after every rebuild.
         """
         self._programmatic_update = True
-        self._rebuild_tree(self._value, self.search.GetValue())
+        self._rebuild_control(self._value, self.search.GetValue())
         self._programmatic_update = False
         wx.CallAfter(self.search.SetFocus)
         wx.CallAfter(self.search.SetInsertionPointEnd)

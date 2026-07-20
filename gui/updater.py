@@ -204,24 +204,45 @@ def _apply_update_and_exit(parent, archive_path):
         # If running from PyInstaller executable, sys.executable is the path to the EXE
         exe_path = sys.executable if getattr(sys, 'frozen', False) else os.path.join(app_dir, "Music separator.exe")
         
-        # In PyInstaller, the ffmpeg_bin directory is bundled in the same folder as the exe
-        original_7z_path = os.path.join(os.path.dirname(exe_path), "ffmpeg_bin", "7za.exe")
-        if not os.path.exists(original_7z_path):
+        if getattr(sys, 'frozen', False):
+            # In PyInstaller, the ffmpeg_bin directory is bundled inside sys._MEIPASS or _internal
+            original_7z_path = os.path.join(getattr(sys, '_MEIPASS', ''), "ffmpeg_bin", "7za.exe")
+            if not os.path.exists(original_7z_path):
+                original_7z_path = os.path.join(os.path.dirname(exe_path), "_internal", "ffmpeg_bin", "7za.exe")
+        else:
             # Fallback for development/venv setup
             original_7z_path = os.path.join(app_dir, "ffmpeg_bin", "7za.exe")
 
+        # Normalize all paths for batch execution
+        exe_path = os.path.normpath(exe_path)
+        original_7z_path = os.path.normpath(original_7z_path)
+        archive_path = os.path.normpath(archive_path)
+        app_dir = os.path.normpath(app_dir)
+
         update_bat_path = os.path.join(temp_dir, f"update_{pid}.bat")
 
-        # Create batch script
+        # Create batch script that handles both flat archives and archives nested inside a single root folder.
+        # It also deletes the old _internal folder (compiled libraries) to ensure clean libraries upgrade.
         bat_content = f"""@echo off
 copy /y "{original_7z_path}" "%TEMP%\\7za_temp_updater.exe" >nul
 :wait_loop
 tasklist /FI "PID eq {pid}" | find "{pid}" >nul
 if not errorlevel 1 (
-    timeout /t 1 /nobreak >nul
+    ping -n 2 127.0.0.1 >nul
     goto wait_loop
 )
-"%TEMP%\\7za_temp_updater.exe" x "{archive_path}" -o"{app_dir}" -y
+if exist "%TEMP%\\ms_update_temp" rmdir /s /q "%TEMP%\\ms_update_temp"
+"%TEMP%\\7za_temp_updater.exe" x "{archive_path}" -o"%TEMP%\\ms_update_temp" -y
+if exist "{app_dir}\\_internal" rmdir /s /q "{app_dir}\\_internal"
+set "HAS_DIR="
+for /d %%i in ("%TEMP%\\ms_update_temp\\*") do (
+    set "HAS_DIR=1"
+    xcopy "%%i\\*" "{app_dir}" /s /e /y /h /r >nul
+)
+if not defined HAS_DIR (
+    xcopy "%TEMP%\\ms_update_temp\\*" "{app_dir}" /s /e /y /h /r >nul
+)
+rmdir /s /q "%TEMP%\\ms_update_temp" >nul 2>&1
 start "" "{exe_path}"
 del "%TEMP%\\7za_temp_updater.exe" >nul 2>&1
 del "%~f0"
@@ -235,25 +256,40 @@ del "%~f0"
     elif sys.platform == 'darwin':
         # Mac updater script
         # On Mac, target app is the .app bundle (usually 3 levels up from macOS executable)
-        # e.g., .../Music separator.app/Contents/MacOS/Music separator -> target is parent of .app
         mac_exe = sys.executable if getattr(sys, 'frozen', False) else ""
         if ".app/Contents/MacOS/" in mac_exe:
-            # We want to replace the entire .app directory.
-            # So extract target dir is the directory containing the .app bundle
             app_bundle_path = mac_exe.split(".app/Contents/MacOS/")[0] + ".app"
             target_dir = os.path.dirname(app_bundle_path)
             app_relaunch_cmd = f'open "{app_bundle_path}"'
         else:
+            app_bundle_path = os.path.join(app_dir, "Music separator.app")
             target_dir = app_dir
-            app_relaunch_cmd = f'open "{os.path.join(app_dir, "Music separator.app")}"'
+            app_relaunch_cmd = f'open "{app_bundle_path}"'
+
+        app_bundle_path = os.path.abspath(app_bundle_path)
+        target_dir = os.path.abspath(target_dir)
 
         update_sh_path = os.path.join(temp_dir, f"update_{pid}.sh")
 
+        # Mac updater script unzips to a temporary folder, locates the .app bundle,
+        # deletes the old .app bundle completely (to avoid signature / stale file errors),
+        # and moves the new app bundle in its place.
         sh_content = f"""#!/bin/bash
 while kill -0 {pid} 2>/dev/null; do
     sleep 1
 done
-unzip -o "{archive_path}" -d "{target_dir}"
+rm -rf "/tmp/ms_update_temp"
+mkdir -p "/tmp/ms_update_temp"
+unzip -o "{archive_path}" -d "/tmp/ms_update_temp"
+EXTRACTED_APP=$(find "/tmp/ms_update_temp" -name "*.app" -type d -maxdepth 2 | head -n 1)
+if [ -n "$EXTRACTED_APP" ]; then
+    rm -rf "{app_bundle_path}"
+    mv "$EXTRACTED_APP" "{target_dir}/"
+else
+    # Fallback to direct unzip if structure is flat
+    unzip -o "{archive_path}" -d "{target_dir}"
+fi
+rm -rf "/tmp/ms_update_temp"
 {app_relaunch_cmd}
 rm "$0"
 """

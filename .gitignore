@@ -64,3 +64,10 @@ commit_*.bat
 
 # Runtime downloaded model sources
 models_src/
+
+# Agent and Graphify data
+.agents/
+graphify-out/
+
+# PDF Documents
+*.pdf

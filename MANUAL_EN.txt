@@ -1,6 +1,6 @@
 ===============================================================================
                        MUSIC SEPARATOR - USER MANUAL                       
-                       ENGLISH MANUAL (EN) - v1.5
+                       ENGLISH MANUAL (EN) - v1.6
 ===============================================================================
 
 Welcome to Music separator, a powerful AI-driven audio separation tool based on 
@@ -28,36 +28,34 @@ macOS (Apple Silicon M1/M2/M3/M4):
 - NOTE: FFmpeg is included in the package. If you face permission issues, 
   refer to the README for 'xattr' command instructions.
 
-2. WHAT'S NEW in v1.5
+2. WHAT'S NEW in v1.6
 -------------------------------------------------------------------------------
-- Enable Preview: When ticked, the application will cut and separate a 30-second
-  portion of the audio (you can choose between the first 30 seconds or the final
-  30 seconds via the dropdown selector that appears next to it). The outputs are
-  saved in a dedicated folder named 'previews' created at the same level as the
-  output folder. Very useful for testing models quickly.
-- Bandit & SCNet Support: Added support for loading and separating audio with the
-  new state-of-the-art Bandit (v2 and Plus) and SCNet models. The program
-  automatically handles model source fetching and uses lightweight mocks to prevent
-  heavy training library installs.
-- Drums / No Drums Preset: Added a new preset that separates the audio into
-  "Drums" and "No Drums" (all other stems combined), using the new remaining
-  stems mixing feature for single models.
-- Auto-Updater: The program now checks for updates at startup or manually 
-  via the 'Help' -> 'Check for updates...' menu. If available, the update 
-  is downloaded and installed with a single click.
-- Automatic Pre-Processing (v1.4):
-  - Normalization: All input audio is normalized to a -0.1 dBFS peak before 
-    separation, ensuring optimal volume without clipping.
-  - Downmix Stereo: Multi-channel files (e.g., 5.1 or 7.1) are automatically 
-    downmixed to stereo before being processed by the AI models.
+- User-Customizable Presets: You can now create your own custom presets by
+  clicking the "Create Preset" button next to the preset selector. Supports
+  single model and multi-pass chained setups, final output renaming, and
+  mixing remaining stems. Custom presets are saved locally inside the program's
+  folder for 100% portability.
+- Downloaded Models Grouping: Locally downloaded models are automatically
+  grouped into a dedicated category ("Downloaded Models (Offline)") at the very
+  top of the selector for quick offline access and easy management.
+- macOS VoiceOver Accessibility: Refactored model tree selector on macOS
+  to use native list controls, making it fully accessible for screen readers
+  and VoiceOver.
+
+WHAT'S NEW in v1.5:
+- Enable Preview: Cuts and separates a 30-second portion of the audio (first or
+  final 30s) in a dedicated folder named 'previews'.
+- Bandit & SCNet Support: Dynamic loading and mock-dependencies for ZFTurbo models.
+- Auto-Updater: Automatic update checks at startup or via the Help menu.
 
 3. BASIC USAGE (SINGLE MODEL)
 -------------------------------------------------------------------------------
 1. Select your input file (WAV, FLAC, MP3, MP4, MKV, etc.).
 2. Choose an Output Directory.
-3. Select a Model from the tree picker (categorized by type: Vocals, etc.).
-   You can use the search bar at the top of the picker to quickly find a
-   model by typing its name.
+3. Select a Model from the list picker.
+   - On Windows/Linux, models are shown in a categorized tree with a search bar.
+   - On macOS, models are listed in an accessible ListBox.
+   - Downloaded models appear at the top under "Downloaded Models (Offline)".
 4. Select the output format (WAV, FLAC, or MP3 at 320kbps).
 5. Click "Start Separation".
 
@@ -68,12 +66,19 @@ will process the file with both and fuse the results.
 - Ensemble Algorithm: Choose how to mix the tracks (Average, Min, Max, Median).
 - Recommended: "avg_wave" (Average) for the most natural sound.
 
-5. CHAINED ENSEMBLE PRESETS (ADVANCED)
+5. CHAINED ENSEMBLE PRESETS & CUSTOM PRESETS
 -------------------------------------------------------------------------------
 The "Preset" dropdown allows you to run "Chained" processes where the output 
 of one model is automatically fed into another.
 
-AVAILABLE PRESETS:
+CREATING CUSTOM PRESETS:
+- Click the "Create Preset" button next to the preset dropdown to open the Creator Dialog.
+- Set a Name and choose between "Single Model" or "Chained Models".
+- Add steps, select models, define which stem to pass, and use the checklist grid to choose which other stems to keep and their custom suffixes.
+- Save your preset. It will instantly appear in the preset dropdown.
+- To delete, select your custom preset and click the "X" button next to it.
+
+AVAILABLE BUILT-IN PRESETS:
 - Vocal Split: Separates Vocals/Inst, then splits Vocals into Lead and Backing.
 - Vocal De-Reverb: Separates Vocals, then removes reverb/echo from the voice.
 - Ultimate Stems (7 Tracks): High-quality Vocals and Instrumental extraction, 

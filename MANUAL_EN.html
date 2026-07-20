@@ -115,6 +115,13 @@
             margin-top: 20px;
         }
 
+        h4 {
+            color: var(--heading-color);
+            font-size: 1.05rem;
+            margin-top: 15px;
+            margin-bottom: 5px;
+        }
+
         a {
             color: var(--primary-color);
             text-decoration: none;
@@ -202,7 +209,7 @@
     <div class="container">
         <header>
             <h1>Music Separator</h1>
-            <p>User Manual - v1.5</p>
+            <p>User Manual - v1.6</p>
         </header>
 
         <div class="download-box">
@@ -215,10 +222,10 @@
             <h3>Table of Contents</h3>
             <ul class="index-list">
                 <li><a href="#installation">1. Installation</a></li>
-                <li><a href="#new-features">2. What's New in v1.5</a></li>
+                <li><a href="#new-features">2. What's New in v1.6</a></li>
                 <li><a href="#basic-usage">3. Basic Usage (Single Model)</a></li>
                 <li><a href="#ensemble">4. Native Ensemble</a></li>
-                <li><a href="#presets">5. Chained Ensemble Presets</a></li>
+                <li><a href="#presets">5. Chained Presets & Custom Presets</a></li>
                 <li><a href="#output">6. Output Options & Cleanup</a></li>
                 <li><a href="#chunking">7. Chunking (OOM Prevention)</a></li>
                 <li><a href="#batch">8. Batch Processing</a></li>
@@ -257,19 +264,18 @@
         </section>
 
         <section id="new-features">
-            <h2>2. What's New in v1.5 <span class="badge">New</span></h2>
+            <h2>2. What's New in v1.6 <span class="badge">New</span></h2>
             <div class="card">
                 <ul>
-                    <li><strong>Enable Preview:</strong> A convenient checkbox that, when ticked, cuts and separates a 30-second portion of the audio (you can choose between the <strong>first 30 seconds</strong> or the <strong>final 30 seconds</strong> via the dropdown selector that appears next to it). The generated stems are saved in a dedicated folder named <code>previews</code> at the same level as your selected output folder. Great for quickly testing model quality on your tracks.</li>
-                    <li><strong>Bandit &amp; SCNet Support:</strong> Added full support for loading and separating audio with the new state-of-the-art <strong>Bandit v2</strong>, <strong>Bandit Plus</strong>, and <strong>SCNet</strong> architectures directly in the GUI. Features automated model source code fetching and lightweight runtime mocking to keep dependencies clean.</li>
-                    <li><strong>Only Drums + Backing Preset:</strong> Introduced the option to mix all non-selected stems into a single output file for single models. This enabled the new <code>preset_drums_no_drums</code> preset, which isolates <code>_Drums</code> and merges everything else into <code>_No_Drums</code>.</li>
-                    <li><strong>Integrated Auto-Updater:</strong> Music separator now includes an automatic update system. At application startup (or manually via <code>Help</code> -> <code>Check for updates...</code>), the program checks for a new release on GitHub. If available, it downloads and installs it in one click without altering your settings or logs.</li>
-                    <li><strong>Automatic Pre-Processing:</strong>
-                        <ul>
-                            <li><em>Normalization:</em> Input audio is automatically normalized to a -0.1 dBFS peak before processing to maximize the AI models' output quality.</li>
-                            <li><em>Stereo Downmix:</em> Multi-channel files (e.g. 5.1, 7.1) are automatically downmixed to stereo to prevent AI model crashes.</li>
-                        </ul>
-                    </li>
+                    <li><strong>User-Customizable Presets:</strong> You can now create your own custom presets by clicking the <strong>Create Preset</strong> button next to the preset selector. Supports single model and multi-pass chained setups, final output renaming, and mixing remaining stems. Custom presets are saved locally inside the program's folder, ensuring 100% portability.</li>
+                    <li><strong>Downloaded Models Grouping:</strong> Locally downloaded models are automatically grouped into a dedicated category (<em>"Downloaded Models (Offline)"</em>) at the very top of the model selector, allowing quick offline access and easy model management.</li>
+                    <li><strong>macOS VoiceOver Accessibility:</strong> Refactored the model selector on macOS to use native list controls, making the model tree fully navigable and accessible for screen readers and VoiceOver.</li>
+                </ul>
+                <p>Previous features in v1.5:</p>
+                <ul>
+                    <li><strong>Enable Preview:</strong> Cuts and separates a 30-second portion of the audio (first or final 30s) in a dedicated <code>previews</code> folder.</li>
+                    <li><strong>Bandit &amp; SCNet Support:</strong> Dynamic loading and mock-dependencies for ZFTurbo models.</li>
+                    <li><strong>Auto-Updater:</strong> Automatic update checks at startup or via the Help menu.</li>
                 </ul>
             </div>
         </section>
@@ -280,7 +286,13 @@
             <ol>
                 <li>Drag and drop or browse your input file in the <strong>Input Audio File</strong> field.</li>
                 <li>Select an <strong>Output Directory</strong>.</li>
-                <li>Click on the <strong>Model</strong> field to open the tree picker and select a model (categorized by logical groups). You can use the built-in search bar at the top of the picker to filter and quickly find models by typing part of their name.</li>
+                <li>Click on the <strong>Model</strong> field to select a model.
+                    <ul>
+                        <li>On Windows and Linux, models are organized in a categorized tree with a search bar.</li>
+                        <li>On macOS, models are listed in a simplified, native, accessible listbox.</li>
+                        <li>Locally downloaded models appear in the special category <strong>"Downloaded Models (Offline)"</strong> at the top of the list.</li>
+                    </ul>
+                </li>
                 <li>Select the output format (WAV, FLAC, or MP3 at 320kbps).</li>
                 <li>Click on <strong>Start Separation</strong>.</li>
             </ol>
@@ -297,15 +309,29 @@
         </section>
 
         <section id="presets">
-            <h2>5. Chained Ensemble Presets (Advanced)</h2>
+            <h2>5. Chained Presets &amp; Custom Presets (Advanced)</h2>
             <p>The <strong>Preset</strong> dropdown allows you to run complex multi-model processes where the output of one separation is automatically fed into another model for further cleaning or stem split.</p>
+            
             <div class="card">
-                <p>Available chained presets include:</p>
+                <h3>Creating Custom Presets</h3>
+                <p>You can create and manage your own custom presets directly from the GUI:</p>
+                <ul>
+                    <li>Click the <strong>Create Preset</strong> button next to the Preset dropdown to open the Creator Dialog.</li>
+                    <li>Enter a Name and choose the type (Single Model or Chained Models).</li>
+                    <li><strong>Single Model:</strong> Select the model, define suffix mappings for output files, and optionally enable "Mix Remaining" to combine all other stems.</li>
+                    <li><strong>Chained Models:</strong> Add consecutive steps, choose a model for each step, select which stem to pass to the next step, and use the checklist grid to choose which other stems to keep and their custom suffixes.</li>
+                    <li>Click <strong>Save Preset</strong>. The preset will immediately appear in the dropdown.</li>
+                    <li>To delete a custom preset, select it from the dropdown and click the <strong>X</strong> button.</li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h3>Built-in Chained Presets</h3>
                 <ul>
                     <li><strong>Vocal Split:</strong> Separates instrumental and vocals, then splits the vocal track into Lead vocals and Backing vocals.</li>
                     <li><strong>Vocal De-Reverb:</strong> Extracts vocals and automatically removes background reverb and echo.</li>
                     <li><strong>Ultimate Stems (7 Tracks):</strong> Extracts vocals and instrumental, then splits the instrumental track into 5 stems (Bass, Drums, Piano, Guitar, Other) and saves an extra <code>_Extra</code> file.</li>
-                    <li><strong>Ultimate Stems + Drum Split:</strong> Powered by the new 4-pass engine, it separates Lead vocals, Backing vocals, and splits the instrumental track into Bass, Piano, Guitar, and splits the drums into individual components (Kick, Snare, Cymbals, Toms, etc., for over 10 output files).</li>
+                    <li><strong>Ultimate Stems + Drum Split:</strong> Powered by the 4-pass engine, it separates Lead vocals, Backing vocals, and splits the instrumental track into Bass, Piano, Guitar, and splits the drums into individual components (Kick, Snare, Cymbals, Toms, etc., for over 10 output files).</li>
                     <li><strong>Guitar Extraction:</strong> Preset optimized to isolate lead/rhythm guitars from the rest of the song.</li>
                     <li><strong>Male/Female Split:</strong> Splits the vocal track specifically isolating male vs. female voices.</li>
                     <li><strong>Live Restore:</strong> Isolates and extracts crowd noise or applause, then divides the music performance into backing and clean vocals.</li>
@@ -317,7 +343,7 @@
         </section>
 
         <section id="output">
-            <h2>6. Output Options & Cleanup</h2>
+            <h2>6. Output Options &amp; Cleanup</h2>
             <ul>
                 <li><strong>Save in subfolder:</strong> If checked, automatically creates a subfolder named after the input song. Recommended for keeping chained/multi-stem outputs organized.</li>
                 <li><strong>Delete silent stems:</strong> If the generated stems are quieter than -50 dB (essentially pure silence), the program automatically deletes them to keep folders clean.</li>
@@ -345,7 +371,7 @@
         </section>
 
         <section id="technical">
-            <h2>9. Technical Notes & Suffixes</h2>
+            <h2>9. Technical Notes &amp; Suffixes</h2>
             <p>Output files will contain specific suffixes indicating the isolated stem:</p>
             <ul>
                 <li><code>_Vocals</code>: Combined vocal track.</li>

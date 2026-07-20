@@ -115,6 +115,13 @@
             margin-top: 20px;
         }
 
+        h4 {
+            color: var(--heading-color);
+            font-size: 1.05rem;
+            margin-top: 15px;
+            margin-bottom: 5px;
+        }
+
         a {
             color: var(--primary-color);
             text-decoration: none;
@@ -202,45 +209,45 @@
     <div class="container">
         <header>
             <h1>Music Separator</h1>
-            <p>Manuale Utente Italiano - v1.5</p>
+            <p>Manuale Utente - v1.6</p>
         </header>
 
         <div class="download-box">
-            <h3>Scarica l'ultima versione</h3>
-            <p>Music separator si aggiorna frequentemente con nuovi modelli e funzionalita'.</p>
+            <h3>Scarica l'Ultima Versione</h3>
+            <p>Music separator viene aggiornato frequentemente con nuovi modelli e funzionalita'.</p>
             <a href="https://github.com/GianlucaApollaro/Music-Separator-GUI/releases/latest" class="download-btn" target="_blank">Vai al Download Ufficiale</a>
         </div>
 
         <div class="index-box">
-            <h3>Indice delle Sezioni</h3>
+            <h3>Indice dei Contenuti</h3>
             <ul class="index-list">
-                <li><a href="#installazione">1. Installazione</a></li>
-                <li><a href="#novita">2. Novita' di Versione (v1.5)</a></li>
-                <li><a href="#uso-base">3. Uso Base (Modello Singolo)</a></li>
-                <li><a href="#ensemble">4. Ensemble Nativo</a></li>
-                <li><a href="#preset">5. Preset Ensemble a Catena</a></li>
-                <li><a href="#output">6. Opzioni di Output e Pulizia</a></li>
+                <li><a href="#installation">1. Installazione</a></li>
+                <li><a href="#new-features">2. Novità nella v1.6</a></li>
+                <li><a href="#basic-usage">3. Uso Base (Modello Singolo)</a></li>
+                <li><a href="#ensemble">4. Native Ensemble</a></li>
+                <li><a href="#presets">5. Preset a Catena &amp; Personalizzati</a></li>
+                <li><a href="#output">6. Opzioni di Output &amp; Pulizia</a></li>
                 <li><a href="#chunking">7. Chunking (Prevenzione OOM)</a></li>
                 <li><a href="#batch">8. Elaborazione in Batch</a></li>
-                <li><a href="#tecnica">9. Note Tecniche e Suffissi</a></li>
+                <li><a href="#technical">9. Note Tecniche &amp; Suffissi</a></li>
             </ul>
         </div>
 
-        <section id="installazione">
+        <section id="installation">
             <h2>1. Installazione</h2>
             
             <div class="card">
                 <h3>Windows (CPU o GPU)</h3>
-                <p>Se utilizzi la versione precompilata autonoma:</p>
+                <p>Se hai scaricato la versione standalone precompilata:</p>
                 <ol>
-                    <li>Scarica l'archivio <code>.7z</code> adatto alla tua macchina (versione <strong>GPU</strong> per schede grafiche NVIDIA CUDA dedicate, o <strong>CPU</strong> per altre schede o processori).</li>
-                    <li>Estrai l'archivio usando un programma come 7-Zip.</li>
-                    <li>Avvia direttamente l'applicazione cliccando su <code>Music separator.exe</code> (GPU) o <code>Music separator CPU.exe</code> (CPU).</li>
+                    <li>Scarica l'archivio in formato <code>.7z</code> adatto alla tua macchina (versione <strong>GPU</strong> per schede grafiche NVIDIA CUDA, o versione <strong>CPU</strong> per altre schede o processori).</li>
+                    <li>Estrai l'archivio utilizzando uno strumento come 7-Zip.</li>
+                    <li>Avvia l'applicazione direttamente cliccando su <code>Music separator.exe</code> (GPU) o <code>Music separator CPU.exe</code> (CPU).</li>
                 </ol>
-                <p>Se installi partendo dal codice sorgente:</p>
+                <p>Se stai installando dal codice sorgente:</p>
                 <ul>
-                    <li>Avvia il file <code>install.bat</code> (o <code>install_cpu.bat</code>) per creare l'ambiente virtuale python e scaricare le dipendenze richieste.</li>
-                    <li>Avvia <code>run.bat</code> (o <code>run_Cpu.bat</code>) per lanciare il programma.</li>
+                    <li>Esegui <code>install.bat</code> (o <code>install_cpu.bat</code>) per creare l'ambiente virtuale Python e scaricare le dipendenze.</li>
+                    <li>Esegui <code>run.bat</code> (o <code>run_Cpu.bat</code>) per avviare il programma.</li>
                 </ul>
             </div>
 
@@ -248,117 +255,136 @@
                 <h3>macOS (Apple Silicon M1/M2/M3/M4)</h3>
                 <ol>
                     <li>Scarica il pacchetto per Mac in formato <code>.zip</code>.</li>
-                    <li>Estrai l'archivio e sposta il bundle <code>Music separator.app</code> nella tua cartella <code>/Applications</code>.</li>
-                    <li>Fai clic destro sull'applicazione e seleziona <strong>Apri</strong> (necessario solo al primo avvio per aggirare i controlli del Gatekeeper di Apple).</li>
+                    <li>Estrai l'archivio e sposta la cartella <code>Music separator.app</code> nella tua cartella <code>/Applications</code> (Applicazioni).</li>
+                    <li>Fai clic destro sull'applicazione e seleziona <strong>Apri</strong> (richiesto solo al primo avvio per bypassare i controlli di sicurezza di Apple Gatekeeper).</li>
                 </ol>
-                <p><strong>Nota:</strong> FFmpeg e' incluso nel pacchetto. Se riscontri blocchi di autorizzazione, apri il Terminale ed esegui:</p>
+                <p><strong>Nota:</strong> FFmpeg è incluso nel pacchetto. Se riscontri blocchi di autorizzazione, apri il Terminale ed esegui il comando:</p>
                 <pre>xattr -cr "/Applications/Music separator.app"</pre>
             </div>
         </section>
 
-        <section id="novita">
-            <h2>2. Novita' di Versione (v1.5) <span class="badge">Nuovo</span></h2>
+        <section id="new-features">
+            <h2>2. Novità nella v1.6 <span class="badge">Nuovo</span></h2>
             <div class="card">
                 <ul>
-                    <li><strong>Abilita Anteprima:</strong> Una comoda checkbox che, se spuntata, taglia ed elabora solo una porzione di 30 secondi dell'audio (consente di scegliere tra i <strong>primi 30 secondi</strong> o gli <strong>ultimi 30 secondi</strong> tramite un apposito menu a tendina che compare a fianco). Gli stem generati vengono salvati in una cartella dedicata chiamata <code>previews</code> allo stesso livello della cartella di output selezionata. Perfetta per testare velocemente l'efficacia dei modelli sui tuoi brani.</li>
-                    <li><strong>Supporto Bandit &amp; SCNet:</strong> Abilitato il supporto completo per caricare ed elaborare audio con i modelli basati sulle nuove architetture allo stato dell'arte <strong>Bandit v2</strong>, <strong>Bandit Plus</strong> e <strong>SCNet</strong> direttamente nella GUI, con download automatico del codice sorgente del modello e mock delle librerie per mantenere l'ambiente leggero.</li>
-                    <li><strong>Preset "Solo Batteria + Accompagnamento":</strong> Introdotta l'opzione di mixare tutti gli stem rimanenti in un unico file per modello singolo. Questo ha permesso l'aggiunta del preset <code>preset_drums_no_drums</code> (Solo Batteria + Accompagnamento) che genera due tracce: <code>_Drums</code> (batteria) e <code>_No_Drums</code> (il resto del mix).</li>
-                    <li><strong>Auto-Updater Integrato:</strong> Music separator ora include un sistema di aggiornamento automatico. All'avvio dell'applicazione (o tramite il menu <code>Aiuto</code> -> <code>Controlla aggiornamenti...</code>), il programma controlla se e' presente una nuova release su GitHub. Se disponibile, permette di scaricarla ed installarla con un solo clic senza cancellare le tue impostazioni o i tuoi log.</li>
-                    <li><strong>Pre-processamento Automatico:</strong>
-                        <ul>
-                            <li><em>Normalizzazione:</em> L'audio in ingresso viene normalizzato automaticamente a -0.1 dBFS prima dell'elaborazione per massimizzare la resa dei modelli IA.</li>
-                            <li><em>Stereo Downmix:</em> File con canali surround (5.1, 7.1) vengono convertiti automaticamente in stereo per prevenire crash dei modelli.</li>
-                        </ul>
-                    </li>
+                    <li><strong>Preset Personalizzati dall'Utente:</strong> Ora puoi creare i tuoi preset cliccando sul pulsante <strong>Crea preset</strong> accanto al selettore dei preset. Supporta preset a modello singolo o catene multipasso, rinomina personalizzata degli stem di output e unione dei rimanenti. I preset sono salvati nella cartella locale del programma per una portabilità assoluta.</li>
+                    <li><strong>Raggruppamento Modelli Scaricati:</strong> I modelli scaricati localmente sono ora raggruppati in cima all'elenco nella categoria speciale (<em>"Modelli Scaricati (Offline)"</em>), facilitando l'accesso rapido offline e una gestione più ordinata dei modelli.</li>
+                    <li><strong>Accessibilità macOS VoiceOver:</strong> Rifattorizzato il selettore dei modelli su macOS per utilizzare i controlli nativi del sistema (ListBox), rendendo l'intera lista dei modelli navigabile ed accessibile da screen reader e VoiceOver.</li>
+                </ul>
+                <p>Funzionalità introdotte nella v1.5:</p>
+                <ul>
+                    <li><strong>Abilita Anteprima:</strong> Separa solo 30 secondi (primi o ultimi) in una cartella dedicata chiamata <code>previews</code>.</li>
+                    <li><strong>Supporto Bandit &amp; SCNet:</strong> Caricamento dinamico dei modelli ZFTurbo e mock delle dipendenze di addestramento.</li>
+                    <li><strong>Auto-Updater:</strong> Controllo automatico degli aggiornamenti all'avvio o dal menu Aiuto.</li>
                 </ul>
             </div>
         </section>
 
-        <section id="uso-base">
+        <section id="basic-usage">
             <h2>3. Uso Base (Modello Singolo)</h2>
-            <p>Per avviare una separazione classica con un modello:</p>
+            <p>Per avviare una classica separazione con un singolo modello:</p>
             <ol>
-                <li>Trascina o sfoglia il file audio di input nel campo <strong>File Audio Input</strong>.</li>
+                <li>Trascina o seleziona il tuo file audio nel campo <strong>File Audio Input</strong>.</li>
                 <li>Seleziona una <strong>Cartella di Output</strong>.</li>
-                <li>Fai clic sulla casella del <strong>Modello</strong> per aprire il selettore ad albero e seleziona un modello specifico (divisi in categorie logiche). Puoi utilizzare la barra di ricerca integrata in cima al selettore per filtrare e trovare al volo i modelli inserendo parte del loro nome.</li>
-                <li>Seleziona il formato di esportazione (WAV, FLAC o MP3 a 320kbps).</li>
-                <li>Fai clic su <strong>Avvia Separazione</strong>.</li>
+                <li>Fai clic sul campo <strong>Modello</strong> per selezionare il modello desiderato.
+                    <ul>
+                        <li>Su Windows e Linux, i modelli sono mostrati in un albero suddiviso per categorie con una comoda barra di ricerca in alto.</li>
+                        <li>Su macOS, i modelli sono elencati in una ListBox nativa, semplificata ed accessibile.</li>
+                        <li>I modelli scaricati compaiono nella categoria speciale <strong>"Modelli Scaricati (Offline)"</strong> all'inizio della lista.</li>
+                    </ul>
+                </li>
+                <li>Seleziona il formato di uscita (WAV, FLAC, o MP3 a 320kbps).</li>
+                <li>Clicca su <strong>Avvia Separazione</strong>.</li>
             </ol>
         </section>
 
         <section id="ensemble">
-            <h2>4. Ensemble Nativo (Fusione di due Modelli)</h2>
-            <p>Selezionando la checkbox <strong>Abilita Ensemble</strong> potrai combinare i risultati di due modelli diversi:</p>
+            <h2>4. Native Ensemble (Fondere due Modelli)</h2>
+            <p>Spunta la casella <strong>Abilita Ensemble</strong> per combinare l'output di due modelli diversi:</p>
             <ul>
-                <li>Scegli il modello principale (Modello 1) e il modello secondario (Modello 2).</li>
-                <li>Scegli l'<strong>Algoritmo Ensemble</strong> per fondere le forme d'onda (es. <code>avg_wave</code> per calcolare la media delle tracce, <code>min_wave</code>, <code>max_wave</code> o <code>median_wave</code>).</li>
-                <li><em>Consigliato:</em> L'opzione predefinita <code>avg_wave</code> (media della forma d'onda) produce in genere gli stem piu' puliti e naturali.</li>
+                <li>Scegli il modello primario (Modello 1) e il modello secondario (Modello 2).</li>
+                <li>Scegli l'<strong>Algoritmo Ensemble</strong> per fondere le forme d'onda (es. <code>avg_wave</code> per fare la media, <code>min_wave</code>, <code>max_wave</code>, o <code>median_wave</code>).</li>
+                <li><em>Consigliato:</em> L'opzione predefinita <code>avg_wave</code> generalmente produce gli stem più puliti e naturali.</li>
             </ul>
         </section>
 
-        <section id="preset">
-            <h2>5. Preset Ensemble a Catena (Avanzato)</h2>
-            <p>Il menu a tendina <strong>Preset</strong> ti consente di avviare separazioni a catena complesse (multi-modello) in cui l'output di una separazione viene inviato automaticamente ad un altro modello specifico per un'ulteriore pulizia o suddivisione.</p>
+        <section id="presets">
+            <h2>5. Preset a Catena &amp; Personalizzati (Avanzato)</h2>
+            <p>La tendina <strong>Preset</strong> consente di eseguire processi avanzati in cascata (catena) in cui il risultato di una separazione viene inviato automaticamente a un modello successivo.</p>
+            
             <div class="card">
-                <p>I preset a catena disponibili includono:</p>
+                <h3>Creare Preset Personalizzati</h3>
+                <p>Puoi creare e gestire i tuoi preset direttamente dall'interfaccia grafica:</p>
                 <ul>
-                    <li><strong>Separazione Vocali:</strong> Separa base e voce, poi divide la traccia vocale in voce principale (Lead) e cori (Backing).</li>
-                    <li><strong>De-Reverb Vocali:</strong> Estrae le voci e rimuove automaticamente riverberi ed echi di fondo.</li>
-                    <li><strong>Ultimate Stems (7 Tracce):</strong> Isola voce e base, poi divide la base in 5 tracce (Basso, Batteria, Piano, Chitarra, Altro) salvando anche un file speciale <code>_Extra</code>.</li>
-                    <li><strong>Ultimate Stems + Drum Split:</strong> Basato sul nuovo motore a 4 passaggi, separa la voce principale (Lead), i cori (Backing), e divide la base in Basso, Piano, Chitarra, Altro, e scompone la batteria nei suoi elementi singoli (Cassa, Rullante, Piatti, Tom, ecc., per oltre 10 tracce totali).</li>
-                    <li><strong>Estrazione Chitarra:</strong> Preset ottimizzato per separare la chitarra solista/ritmica dal resto del brano.</li>
-                    <li><strong>Separazione Voce Uomo/Donna:</strong> Divide la traccia vocale isolando specificamente voci maschili da voci femminili.</li>
-                    <li><strong>Restauro Live:</strong> Isola ed estrae il rumore o gli applausi del pubblico, dividendo poi la performance in base e voce pulita.</li>
-                    <li><strong>Prep Vocale RVC:</strong> Isola una traccia Lead eccezionalmente pulita per essere utilizzata come dataset di addestramento RVC.</li>
-                    <li><strong>Solo Batteria:</strong> Estrae la batteria eliminando completamente qualsiasi traccia melodica o vocale.</li>
-                    <li><strong>Solo Batteria + Accompagnamento:</strong> Estrae la batteria (<code>_Drums</code>) e unisce tutti gli altri strumenti ed elementi vocali in una traccia di accompagnamento (<code>_No_Drums</code>).</li>
+                    <li>Clicca sul pulsante <strong>Crea preset</strong> accanto alla tendina Preset per aprire la finestra di creazione.</li>
+                    <li>Inserisci un Nome e scegli il tipo (Modello Singolo o Catena di Modelli).</li>
+                    <li><strong>Modello Singolo:</strong> Seleziona il modello, imposta i suffissi di output e facoltativamente spunta "Unisci l'audio rimanente" per combinare gli stem non selezionati.</li>
+                    <li><strong>Catena di Modelli:</strong> Aggiungi passi successivi, seleziona il modello per ogni passo, imposta quale stem passare al passo successivo e usa la griglia di checkbox per scegliere quali altri stem conservare e i relativi suffissi.</li>
+                    <li>Clicca su <strong>Salva Preset</strong>. Il preset apparirà subito nella tendina principale.</li>
+                    <li>Per eliminare un preset personalizzato, selezionalo dalla tendina e clicca sul pulsante <strong>X</strong>.</li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h3>Preset di Sistema Inclusi</h3>
+                <ul>
+                    <li><strong>Separazione Vocali:</strong> Divide base e voce, poi divide la voce in voce principale (Lead) e cori (Backing).</li>
+                    <li><strong>De-Reverb Vocali:</strong> Estrae le voci ed elimina riverberi ed echi per un suono asciutto.</li>
+                    <li><strong>Ultimate Stem (7 Tracce):</strong> Estrazione di Voci e Base, e divisione della Base in Basso, Batteria, Pianoforte, Chitarra e Altro + file Extra.</li>
+                    <li><strong>Ultimate Stems + Drum Split:</strong> Esegue l'estrazione di Lead vocals, Backing vocals, Basso, Piano, Chitarra e divide la batteria in componenti singoli (Cassa, Rullante, Piatti, Tom, ecc., per oltre 10 tracce totali).</li>
+                    <li><strong>Estrazione Chitarra:</strong> Preset ottimizzato per isolare le chitarre acustiche ed elettriche.</li>
+                    <li><strong>Separazione Uomo/Donna:</strong> Divide la traccia vocale in voce maschile e femminile.</li>
+                    <li><strong>Restauro Live:</strong> Estrae gli applausi e il rumore del pubblico, lasciando pulita la performance musicale.</li>
+                    <li><strong>Prep Vocale RVC:</strong> Isola una Lead pulitissima per essere usata come dataset di addestramento RVC.</li>
+                    <li><strong>Solo Batteria:</strong> Estrae solo le batterie, rimuovendo tutto il resto.</li>
+                    <li><strong>Solo Batteria + Accompagnamento:</strong> Estrae la batteria (<code>_Drums</code>) e unisce il resto degli strumenti in una traccia di accompagnamento unica (<code>_No_Drums</code>).</li>
                 </ul>
             </div>
         </section>
 
         <section id="output">
-            <h2>6. Opzioni di Output e Pulizia</h2>
+            <h2>6. Opzioni di Output &amp; Pulizia</h2>
             <ul>
-                <li><strong>Usa sottocartella:</strong> Se attivo, crea automaticamente una sottocartella col nome del brano di input. Consigliato per tenere ordinati i file dei preset multi-stem.</li>
-                <li><strong>Elimina stem silenziosi:</strong> Se gli stem generati sono inferiori a -50 dB (praticamente silenzio puro), il programma li elimina automaticamente per evitare accumulo di file inutili.</li>
-                <li><strong>Ascolta Stem:</strong> Cliccando questo pulsante a separazione terminata, si aprira' una finestra di dialogo che ti permettera' di riprodurre al volo qualsiasi stem generato senza dover aprire la cartella.</li>
+                <li><strong>Usa sottocartella:</strong> Se attivo, crea una sottocartella col nome del brano. Consigliato per tenere ordinati gli output di preset o ensemble.</li>
+                <li><strong>Elimina stem silenziosi:</strong> Rimuove automaticamente gli stem generati se sono al di sotto di -50 dB (silenzio).</li>
+                <li><strong>Ascolta Stem:</strong> Clicca per riprodurre rapidamente uno stem nel lettore multimediale di sistema.</li>
             </ul>
         </section>
 
         <section id="chunking">
             <h2>7. Chunking (Prevenzione Out-of-Memory)</h2>
-            <p>Se riscontri crash dell'applicazione dovuti alla memoria della scheda video satura (OOM) o se elabori brani molto lunghi (es. interi DJ set):</p>
+            <p>Se riscontri crash del programma a causa della memoria video insufficiente (VRAM) o con file estremamente lunghi:</p>
             <ul>
                 <li>Spunta <strong>Abilita Chunking</strong>.</li>
-                <li>Seleziona una durata in minuti (es. 2 o 5 minuti). L'audio verra' diviso in segmenti temporanei, elaborato a blocchi e infine ricomposto senza alcuna interruzione percepibile.</li>
+                <li>Seleziona una durata in minuti (es. 2 o 5 minuti). L'audio verrà diviso in segmenti temporanei, elaborati a blocchi e infine ricongiunti senza interruzioni.</li>
             </ul>
         </section>
 
         <section id="batch">
             <h2>8. Elaborazione in Batch (Multi-file e Cartelle)</h2>
-            <p>Puoi caricare ed elaborare piu' file contemporaneamente:</p>
+            <p>Puoi caricare ed elaborare molti file contemporaneamente:</p>
             <ul>
-                <li>Usa il pulsante <strong>Sfoglia</strong> e seleziona piu' file nella finestra di dialogo per accodarli.</li>
-                <li>Fai clic su <strong>Seleziona Cartella</strong> per caricare in blocco tutti i file audio supportati all'interno di una cartella (e delle sue sottocartelle).</li>
-                <li>L'interfaccia mostrera' il progresso totale e il progresso del brano corrente in tempo reale.</li>
+                <li>Usa il pulsante <strong>Sfoglia</strong> e seleziona più file per metterli in coda.</li>
+                <li>Clicca su <strong>Seleziona Cartella</strong> per caricare tutti i file supportati di una directory (e sottocartelle).</li>
+                <li>L'interfaccia mostrerà sia il progresso complessivo che quello del brano corrente in tempo reale.</li>
             </ul>
         </section>
 
-        <section id="tecnica">
-            <h2>9. Note Tecniche e Suffissi</h2>
-            <p>I file di output generati conterranno suffissi specifici che indicano lo stelo isolato:</p>
+        <section id="technical">
+            <h2>9. Note Tecniche &amp; Suffissi</h2>
+            <p>I file di output conterranno suffissi specifici che indicano lo stem isolato:</p>
             <ul>
-                <li><code>_Vocals</code>: Voce complessiva (o a cappella).</li>
+                <li><code>_Vocals</code>: Voce completa.</li>
                 <li><code>_Instrumental</code>: Base musicale completa.</li>
-                <li><code>_Lead</code>: Voce solista principale.</li>
+                <li><code>_Lead</code>: Voce principale.</li>
                 <li><code>_Backing</code>: Cori e seconde voci.</li>
                 <li><code>_DeReverb</code>: Voce asciutta senza riverbero.</li>
                 <li><code>_Drums</code>: Batteria.</li>
-                <li><code>_No_Drums</code>: Accompagnamento completo senza la batteria.</li>
-                <li><code>_Bass</code>: Basso.</li>
-                <li><code>_Guitar</code>: Chitarra.</li>
-                <li><code>_Piano</code>: Pianoforte.</li>
-                <li><code>_Other</code> / <code>_Extra</code>: Sintetizzatori o elementi non catalogati.</li>
+                <li><code>_No_Drums</code>: Base musicale senza batteria.</li>
+                <li><code>_Bass</code>: Basso elettrico o sintetizzato.</li>
+                <li><code>_Guitar</code>: Chitarre.</li>
+                <li><code>_Piano</code>: Pianoforte acustico o tastiere.</li>
+                <li><code>_Other</code> / <code>_Extra</code>: Sintetizzatori ed elementi non categorizzati.</li>
             </ul>
         </section>
     </div>

@@ -1,6 +1,6 @@
 ===============================================================================
                        MUSIC SEPARATOR - MANUAL DE USUARIO                       
-                       MANUAL EN ESPAÑOL (ES) - v1.5
+                       MANUAL EN ESPAÑOL (ES) - v1.6
 ===============================================================================
 
 Bienvenido a Music separator, una potente herramienta de separacion de audio 
@@ -20,98 +20,102 @@ WINDOWS:
   o 'Music separator CPU.exe' (versión CPU) directamente.
 - Si instalas desde la fuente:
   - Ejecuta 'install.bat' (o 'install_cpu.bat') para preparar dependencias.
-  - Usa 'run.bat' (o 'run_Cpu.bat') para lanzar la aplicacion.
+  - Usa 'run.bat' (or 'run_Cpu.bat') para lanzar la aplicacion.
 
 macOS (Apple Silicon M1/M2/M3/M4):
 - Descarga la versión de Mac (.zip) y extrae el archivo.
 - Mueve la carpeta resultante a /Applications.
 - Haz clic derecho y selecciona 'Abrir' en 'Music separator.app'.
-- NOTA: FFmpeg esta incluido. Si tienes problemas de permisos, consulta el 
-  README para instrucciones sobre el comando 'xattr'.
+- NOTA: FFmpeg está incluido. Si tienes problemas de permisos, consulta el 
+  README para instrucciones del comando 'xattr'.
 
-2. NOVEDADES DE LA VERSIÓN (v1.5)
+2. NOVEDADES en la v1.6
 -------------------------------------------------------------------------------
-- Habilitar Vista Previa: Al marcar esta opción, el programa cortará y separará
-  una porción de 30 segundos del audio (puedes elegir entre los primeros 30 segundos
-  o los últimos 30 segundos a través del menú desplegable que aparece a su lado).
-  Los archivos se guardarán en una carpeta dedicada llamada 'previews' creada al
-  mismo nivel que la carpeta de salida. Útil para probar modelos rápidamente.
-- Soporte para Bandit y SCNet: Habilitado el soporte para cargar y separar audio
-  con modelos basados en las nuevas arquitecturas de vanguardia Bandit (v2 y Plus)
-  y SCNet. El programa descarga el código fuente automáticamente y utiliza simulaciones
-  ligeras para no sobrecargar el sistema.
-- Preset "Solo Batería + Acompañamiento": Añadido un nuevo preajuste que separa el
-  audio en "Drums" (Batería) y "No Drums" (el resto de los elementos unidos),
-  aprovechando la nueva mezcla de stems restantes.
-- Auto-Updater: La aplicación ahora comprueba actualizaciones al inicio o de 
-  forma manual desde el menú 'Ayuda' -> 'Buscar actualizaciones...'. Si hay una 
-  disponible, se descarga e instala en un solo clic.
-- Pre-procesamiento automático (v1.4):
-  - Normalización: Todo el audio se normaliza al pico de -0.1 dBFS antes de la 
-    separacion, asegurando un volumen optimo sin distorsion.
-  - Downmix Estéreo: Los archivos multicanal (ej. 5.1 o 7.1) se convierten 
-    automaticamente a estereo antes de pasar por los modelos de IA.
+- Preajustes Personalizables por el Usuario: Ahora puedes crear tus propios
+  preajustes haciendo clic en el botón "Crear preajuste" junto al selector de
+  preajustes. Soporta preajustes de modelo único o cadenas multipaso,
+  renombramiento de salida y mezcla de pistas restantes. Los preajustes se
+  guardan localmente en la carpeta del programa para una portabilidad total.
+- Agrupación de Modelos Descargados: Los modelos descargados localmente se
+  agrupan automáticamente en una categoría dedicada ("Modelos Descargados (Offline)")
+  en la parte superior del selector para un acceso rápido sin conexión.
+- Accesibilidad macOS VoiceOver: Se rediseñó el selector de modelos en macOS
+  para utilizar controles de lista nativos, lo que lo hace completamente accesible
+  para lectores de pantalla y VoiceOver.
+
+NOVEDADES en la v1.5:
+- Activar Vista Previa: Procesa un fragmento de 30 segundos (primeros o últimos)
+  en una carpeta dedicada llamada 'previews'.
+- Soporte Bandit & SCNet: Carga dinámica y simulación de dependencias para modelos ZFTurbo.
+- Auto-Updater: Comprobación automática de actualizaciones al iniciar o en el menú Ayuda.
 
 3. USO BÁSICO (MODELO ÚNICO)
 -------------------------------------------------------------------------------
-1. Seleccione su archivo de entrada (WAV, FLAC, MP3, MP4, MKV, etc.).
-2. Elija un Directorio de Salida.
-3. Seleccione un Modelo del menú de árbol (categorizado por tipo).
-   Puedes usar la barra de búsqueda en la parte superior del selector para
-   encontrar rápidamente un modelo escribiendo su nombre.
-4. Seleccione el formato de salida (WAV, FLAC o MP3 a 320kbps).
-5. Haz clic en "Iniciar Separacion".
+1. Arrastra o selecciona tu archivo de audio (WAV, FLAC, MP3, MP4, MKV, etc.).
+2. Elige un Directorio de Salida.
+3. Selecciona un Modelo del selector.
+   - En Windows/Linux, se muestran en un árbol categorizado con barra de búsqueda.
+   - En macOS, se listan en una ListBox nativa y accesible.
+   - Los modelos descargados aparecen al principio bajo "Modelos Descargados (Offline)".
+4. Selecciona el formato de salida (WAV, FLAC o MP3 a 320kbps).
+5. Haz clic en "Iniciar Separación".
 
-4. ENSEMBLE NATIVO (FUSIÓN DE MODELOS)
+4. NATIVE ENSEMBLE (FUSIÓN DE MODELOS)
 -------------------------------------------------------------------------------
-Marca la casilla "Ensemble" para seleccionar DOS modelos diferentes. La 
-aplicacion procesara el archivo con ambos y fusionara los resultados.
-- Algoritmo Ensemble: Puedes elegir cómo fusionar las pistas (Media, Min, Max, Median).
-- Recomendado: "avg_wave" (Media) para un sonido mas natural.
+Marca la casilla "Habilitar Ensemble" para combinar las salidas de dos modelos:
+- Elige el Modelo 1 (principal) y el Modelo 2 (secundario).
+- Elige el Algoritmo Ensemble para fusionar el audio (Average, Min, Max, Median).
+- Recomendado: "avg_wave" (Average) para obtener el sonido más limpio y natural.
 
-5. PRESETS ENSEMBLE EN CADENA (AVANZADOS)
+5. PREAJUSTES EN CADENA Y PREAJUSTES PERSONALIZADOS
 -------------------------------------------------------------------------------
-El menu "Preajustes" permite ejecutar procesos "en cadena" donde la salida 
-de un modelo pasa de forma automatica al siguiente.
+El menú "Preajustes" te permite ejecutar procesos multipaso avanzados en cadena,
+donde la salida de un modelo se envía automáticamente al siguiente modelo.
 
-PRESETS DISPONIBLES:
-- Separacion Vocal: Separa Base/Voz, luego divide las Voces en Lead y Backing.
-- De-Reverb Vocal: Extrae las Voces y luego elimina la reverberacion y el eco.
-- Stems Definitivos (7 Pistas): Extrae Voces e Instrumental, luego divide el 
-  instrumental en Bajo, Bateria, Piano, Guitarra y Otros.
-- Ultimate Stems + Drum Split: Preset de 4 pasos que separa voz principal (Lead),
-  coros (Backing), instrumental, bajo, piano, guitarra y divide la batería en
-  bombo, caja, platillos, toms, etc., para más de 10 pistas en total.
-- Extraccion de Guitarra: Preajuste especializado para aislar guitarras.
-- Separacion Voz Masculina/Femenina: Aisla voces masculinas de femeninas.
-- Restauracion de Vivo: Extrae ruido del publico y luego limpia el escenario.
-- Prep Vocal RVC: Extrae la voz principal (Lead) limpia para clones RVC.
-- Solo Batería: Aisla exclusivamente la batería, eliminando todos los demás instrumentos.
-- Solo Batería + Acompañamiento: Extrae la batería (_Drums) y une el resto de los
+CREAR PREAJUSTES PERSONALIZADOS:
+- Haz clic en el botón "Crear preajuste" junto al menú de preajustes para abrir el diálogo.
+- Elige un Nombre y selecciona entre "Modelo Único" o "Modelos en Cadena".
+- Añade pasos, selecciona modelos, define qué stem pasar y utiliza la cuadrícula de casillas para elegir qué otros stems conservar y sus sufijos correspondientes.
+- Haz clic en Guardar. El preajuste aparecerá de inmediato en el menú principal.
+- Para eliminarlo, selecciónalo del menú y haz clic en el botón "X" a su lado.
+
+PREAJUSTES DE SISTEMA DISPONIBLES:
+- Separación Vocal: Separa Instrumental/Voces, luego divide Voces en Lead y Backing.
+- De-Reverb Vocal: Extrae voces y elimina automáticamente el eco y la reverberación.
+- Stems Definitivos (7 Pistas): Extracción de Voces e Instrumental, y división del
+  Instrumental en Bajo, Batería, Piano, Guitarra y Otros + archivo Extra.
+- Ultimate Stems + Drum Split: Preajuste de 4 pasos que extrae Lead, Backing, Bajo,
+  Piano, Guitarra y divide la batería en componentes individuales (Cassa, Caja, etc.).
+- Extracción de Guitarra: Preajuste optimizado para aislar las guitarras.
+- Separación Hombre/Mujer: Divide la pista vocal en voz masculina y femenina.
+- Restauración de Vivo: Extrae el ruido del público y limpia la música del escenario.
+- Prep Vocal RVC: Extrae una Lead limpia para usar como dataset de RVC.
+- Solo Batería: Aísla exclusivamente la batería, eliminando todos los demás elementos.
+- Solo Batería + Acompañamiento: Extrae la batería (_Drums) y une el resto de
   instrumentos en una pista de acompañamiento única (_No_Drums).
 
 6. OPCIONES DE SALIDA Y LIMPIEZA
 -------------------------------------------------------------------------------
-- Usar subcarpeta: Crea una carpeta con el nombre de la cancion. Si se desactiva, 
-  los archivos se guardan directamente en la carpeta de salida.
-- Eliminar stems silenciosos: Si se activa, el programa borra los stems generados 
-  que esten vacios o muy silenciosos (debajo de -50 dB) para mantener limpia la carpeta.
-- Reproducir Stem: Tras la separacion, pulsa este boton para elegir un stem 
-  y escucharlo al instante en el reproductor del sistema.
+- Usar subcarpeta: Crea una carpeta con el nombre de la canción. Recomendado
+  para mantener limpios los archivos de salida.
+- Eliminar stems silenciosos: Si se activa, borra los stems generados con un
+  volumen inferior a -50 dB (puro silencio).
+- Reproducir Stem: Haz clic para escuchar al instante cualquier stem generado
+  en el reproductor predeterminado del sistema.
 
-7. SEGMENTACIÓN (ARCHIVOS LARGOS / PREVENCIÓN DE MEMORIA)
+7. SEGMENTACIÓN (PREVENCIÓN DE MEMORIA OUT-OF-MEMORY)
 -------------------------------------------------------------------------------
-Si experimentas errores de memoria (OOM) con archivos muy largos:
+Si experimentas errores de memoria (OOM) con archivos largos o tienes poca VRAM:
 - Marca "Activar Segmentacion" y elige el tamaño del bloque (ej. 2 min).
 
 8. PROCESAMIENTO POR LOTES (ARCHIVOS Y CARPETAS)
 -------------------------------------------------------------------------------
-Procesa multiples archivos automaticamente arrastrandolos o usando los 
-botones de "Explorar" y "Seleccionar Carpeta" como origen.
+Procesa múltiples archivos automáticamente arrastrándolos a la ventana o usando
+los botones "Explorar" y "Seleccionar Carpeta" como origen.
 
 9. NOTAS TÉCNICAS Y SUFIJOS
 -------------------------------------------------------------------------------
-Los archivos de salida tendran sufijos claros como:
+Los archivos de salida tendrán sufijos claros como:
 _Vocals, _Instrumental, _Lead, _Backing, _DeReverb, _Other, _Extra, _Drums, _No_Drums.
 
 ===============================================================================

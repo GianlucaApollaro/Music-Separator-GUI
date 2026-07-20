@@ -1,3 +1,7 @@
+import os
+import sys
+import json
+
 class PresetManager:
     preset_keys = [
         "preset_none", 
@@ -158,4 +162,114 @@ class PresetManager:
 
     @classmethod
     def get_preset_name(cls, preset_key: str, i18n_instance) -> str:
+        if preset_key.startswith("custom_"):
+            return cls.presets_config.get(preset_key, {}).get("name", preset_key)
         return i18n_instance.tr(preset_key)
+
+    @classmethod
+    def _get_custom_presets_path(cls) -> str:
+        if getattr(sys, 'frozen', False):
+            if sys.platform == 'darwin':
+                # On macOS app bundle, sys.executable is inside the .app bundle
+                # We save outside the .app for portability.
+                app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(sys.executable))))
+            else:
+                app_dir = os.path.dirname(sys.executable)
+        else:
+            app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(app_dir, 'custom_presets.json')
+
+    @classmethod
+    def load_custom_presets(cls):
+        """Loads custom presets from the portable JSON file and merges them."""
+        # Ensure we don't duplicate keys if called multiple times
+        cls.preset_keys = [k for k in cls.preset_keys if not k.startswith("custom_")]
+        for k in list(cls.presets_config.keys()):
+            if k.startswith("custom_"):
+                del cls.presets_config[k]
+
+        path = cls._get_custom_presets_path()
+        if not os.path.exists(path):
+            return
+
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                custom_presets = json.load(f)
+            
+            for key, config in custom_presets.items():
+                if not key.startswith("custom_"):
+                    key = f"custom_{key}"
+                
+                cls.presets_config[key] = config
+                if key not in cls.preset_keys:
+                    cls.preset_keys.append(key)
+        except Exception as e:
+            print(f"Error loading custom presets: {e}")
+
+    @classmethod
+    def save_custom_preset(cls, name: str, config: dict) -> str:
+        """Saves a custom preset to the JSON file and updates memory. Returns the key."""
+        import re
+        normalized_name = re.sub(r'[^a-zA-Z0-9_]', '_', name.lower())
+        preset_key = f"custom_{normalized_name}"
+        
+        base_key = preset_key
+        counter = 1
+        while preset_key in cls.presets_config:
+            if cls.presets_config[preset_key].get("name") == name:
+                break
+            preset_key = f"{base_key}_{counter}"
+            counter += 1
+
+        config["name"] = name
+
+        path = cls._get_custom_presets_path()
+        custom_presets = {}
+        if os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    custom_presets = json.load(f)
+            except Exception:
+                custom_presets = {}
+
+        custom_presets[preset_key] = config
+
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(custom_presets, f, indent=4, ensure_ascii=False)
+        except Exception as e:
+            print(f"Error saving custom preset: {e}")
+
+        cls.presets_config[preset_key] = config
+        if preset_key not in cls.preset_keys:
+            cls.preset_keys.append(preset_key)
+            
+        return preset_key
+
+    @classmethod
+    def delete_custom_preset(cls, preset_key: str) -> bool:
+        """Deletes a custom preset from the JSON file and memory."""
+        if not preset_key.startswith("custom_"):
+            return False
+
+        path = cls._get_custom_presets_path()
+        if not os.path.exists(path):
+            return False
+
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                custom_presets = json.load(f)
+            
+            if preset_key in custom_presets:
+                del custom_presets[preset_key]
+                with open(path, 'w', encoding='utf-8') as f:
+                    json.dump(custom_presets, f, indent=4, ensure_ascii=False)
+            
+            if preset_key in cls.presets_config:
+                del cls.presets_config[preset_key]
+            if preset_key in cls.preset_keys:
+                cls.preset_keys.remove(preset_key)
+            return True
+        except Exception as e:
+            print(f"Error deleting custom preset: {e}")
+            return False

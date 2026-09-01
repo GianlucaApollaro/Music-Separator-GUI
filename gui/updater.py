@@ -152,41 +152,62 @@ def _start_download(parent, download_url):
     )
 
     def _download_thread():
+        cancelled = [False]
         try:
             req = urllib.request.Request(download_url, headers={"User-Agent": "Music-Separator-GUI-Updater"})
             with urllib.request.urlopen(req, timeout=30) as response:
                 total_size = int(response.info().get('Content-Length', 0))
                 bytes_so_far = 0
                 chunk_size = 1024 * 64
-                
+
+                # wx APIs must run on the UI thread: progress.Update and
+                # WasCancelled() are both called from here via CallAfter, and the
+                # result is propagated back to the worker thread with a shared flag.
+                def _update_progress(p):
+                    if progress:
+                        progress.Update(p, i18n.tr("update_downloading").format(percent=p))
+                        if progress.WasCancelled():
+                            cancelled[0] = True
+
                 with open(local_path, "wb") as f:
-                    while True:
+                    while not cancelled[0]:
                         chunk = response.read(chunk_size)
                         if not chunk:
                             break
                         f.write(chunk)
                         bytes_so_far += len(chunk)
-                        
+
                         if total_size > 0:
                             percent = int((bytes_so_far / total_size) * 100)
                         else:
                             percent = 50  # Fallback if content-length is not sent
-                        
-                        # Update progress dialog UI
-                        wx.CallAfter(lambda p=percent: progress.Update(p, i18n.tr("update_downloading").format(percent=p)) if progress else None)
-                        
-                        if progress and progress.WasCancelled():
-                            f.close()
-                            try:
-                                os.remove(local_path)
-                            except OSError:
-                                pass
-                            return
+
+                        wx.CallAfter(_update_progress, min(percent, 100))
+
+            if cancelled[0]:
+                try:
+                    os.remove(local_path)
+                except OSError:
+                    pass
+                wx.CallAfter(progress.Destroy)
+                return
+
+            # A dropped connection ends the read loop without raising. Installing a
+            # truncated archive would brick the app, so refuse to proceed.
+            if total_size > 0 and bytes_so_far != total_size:
+                raise IOError(
+                    f"Incomplete download: {bytes_so_far}/{total_size} bytes"
+                )
 
             # Download finished, trigger installation
             wx.CallAfter(progress.Destroy)
             wx.CallAfter(_apply_update_and_exit, parent, local_path)
         except Exception as e:
+            try:
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+            except OSError:
+                pass
             wx.CallAfter(progress.Destroy)
             wx.CallAfter(wx.MessageBox, f"{i18n.tr('update_download_err')}\n\n{str(e)}", i18n.tr("msg_error_title"), wx.OK | wx.ICON_ERROR)
 
@@ -196,7 +217,13 @@ def _start_download(parent, download_url):
 def _apply_update_and_exit(parent, archive_path):
     """Generates the detached launcher updater script, runs it, and terminates the app."""
     pid = os.getpid()
-    app_dir = os.path.abspath(os.getcwd())
+    # Derive the app folder from the executable, not the CWD: a shortcut with a
+    # different "Start in" directory would make the script delete and copy files
+    # in the wrong folder.
+    if getattr(sys, 'frozen', False):
+        app_dir = os.path.dirname(sys.executable)
+    else:
+        app_dir = os.path.abspath(os.getcwd())
     temp_dir = tempfile.gettempdir()
 
     if sys.platform == 'win32':
@@ -223,8 +250,16 @@ def _apply_update_and_exit(parent, archive_path):
 
         # Create batch script that handles both flat archives and archives nested inside a single root folder.
         # It also deletes the old _internal folder (compiled libraries) to ensure clean libraries upgrade.
+        # Every destructive step only runs after the previous one verified success, otherwise the
+        # update is aborted and the (still working) previous version is relaunched.
         bat_content = f"""@echo off
+set "UPDATER_LOG=%TEMP%\\ms_update_{pid}.log"
+echo [%date% %time%] Update started > "%UPDATER_LOG%"
 copy /y "{original_7z_path}" "%TEMP%\\7za_temp_updater.exe" >nul
+if not exist "%TEMP%\\7za_temp_updater.exe" (
+    echo [%date% %time%] ERROR: failed to copy 7za.exe >> "%UPDATER_LOG%"
+    goto :fail
+)
 :wait_loop
 tasklist /FI "PID eq {pid}" | find "{pid}" >nul
 if not errorlevel 1 (
@@ -232,7 +267,11 @@ if not errorlevel 1 (
     goto wait_loop
 )
 if exist "%TEMP%\\ms_update_temp" rmdir /s /q "%TEMP%\\ms_update_temp"
-"%TEMP%\\7za_temp_updater.exe" x "{archive_path}" -o"%TEMP%\\ms_update_temp" -y
+"%TEMP%\\7za_temp_updater.exe" x "{archive_path}" -o"%TEMP%\\ms_update_temp" -y >> "%UPDATER_LOG%" 2>&1
+if errorlevel 1 (
+    echo [%date% %time%] ERROR: extraction failed >> "%UPDATER_LOG%"
+    goto :fail
+)
 if exist "{app_dir}\\_internal" rmdir /s /q "{app_dir}\\_internal"
 set "HAS_DIR="
 for /d %%i in ("%TEMP%\\ms_update_temp\\*") do (
@@ -243,9 +282,17 @@ if not defined HAS_DIR (
     xcopy "%TEMP%\\ms_update_temp\\*" "{app_dir}" /s /e /y /h /r >nul
 )
 rmdir /s /q "%TEMP%\\ms_update_temp" >nul 2>&1
+echo [%date% %time%] Update OK, restarting >> "%UPDATER_LOG%"
 start "" "{exe_path}"
 del "%TEMP%\\7za_temp_updater.exe" >nul 2>&1
 del "%~f0"
+exit /b 0
+:fail
+echo [%date% %time%] Update ABORTED, previous version untouched >> "%UPDATER_LOG%"
+start "" "{exe_path}"
+del "%TEMP%\\7za_temp_updater.exe" >nul 2>&1
+del "%~f0"
+exit /b 1
 """
         with open(update_bat_path, "w", encoding="ansi") as f:
             f.write(bat_content)

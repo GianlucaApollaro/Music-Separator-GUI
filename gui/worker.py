@@ -3,15 +3,17 @@ import threading
 import logging
 import os
 import subprocess
-from audio_separator.separator import Separator
-from gui.i18n_manager import i18n
-from gui.audio_utils import stem_from_filename, blend_audio, get_model_stems, stems_are_equivalent, get_rename_suffix
-
 import re
 import sys
 import tempfile
 import shutil
 import uuid
+import traceback
+import soundfile as sf
+import numpy as np
+from audio_separator.separator import Separator
+from gui.i18n_manager import i18n
+from gui.audio_utils import stem_from_filename, blend_audio, get_model_stems, stems_are_equivalent, get_rename_suffix, get_audio_volume_stats
 
 class TqdmCaptureStream:
     def __init__(self, notify_func, original_stream):
@@ -63,27 +65,35 @@ class GuiLogHandler(logging.Handler):
             raise KeyboardInterrupt("Stopped by user")
 
 class SeparationThread(threading.Thread):
-    def __init__(self, parent, input_files, output_dir, model_name, use_gpu=True, output_format="WAV", model_name_2=None, model_name_3=None, model_name_4=None, preset_config=None, ensemble_algorithm="avg_wave", chunk_duration=None, remove_leading_numbers=False, use_subfolder=True, delete_silent_stems=False, enable_preview=False, preview_mode="first"):
+    def __init__(self, parent, input_files, output_dir, model_name, use_gpu=True, output_format="WAV", model_name_2=None, model_name_3=None, model_name_4=None, model_name_5=None, preset_config=None, ensemble_algorithm="avg_wave", chunk_duration=None, remove_leading_numbers=False, use_subfolder=True, delete_silent_stems=False, silent_stem_threshold=-50.0, enable_preview=False, preview_mode="first", bit_depth=None, bitrate=None, on_progress=None, on_log=None, on_done=None):
         super().__init__()
         self.parent = parent
+        self.on_progress = on_progress
+        self.on_log = on_log
+        self.on_done = on_done
         self.input_files = input_files
         self.output_dir = output_dir
         self.model_name = model_name
         self.use_gpu = use_gpu
         self.output_format = output_format
+        self.bit_depth = bit_depth or "24-bit"
+        self.bitrate = bitrate or "320k"
         self.model_name_2 = model_name_2
         self.model_name_3 = model_name_3
         self.model_name_4 = model_name_4
+        self.model_name_5 = model_name_5
         self.preset_config = preset_config
         self.ensemble_algorithm = ensemble_algorithm
         self.chunk_duration = chunk_duration
         self.remove_leading_numbers = remove_leading_numbers
         self.use_subfolder = use_subfolder
         self.delete_silent_stems = delete_silent_stems
+        self.silent_stem_threshold = float(silent_stem_threshold) if silent_stem_threshold is not None else -50.0
         self.enable_preview = enable_preview
         self.preview_mode = preview_mode
         self._stop_event = threading.Event()
         self.all_output_files = []  # accumulates absolute paths of all generated stems
+        self._temp_dirs = []  # temp dirs created during separation, cleaned in run()'s finally
 
         if self.enable_preview:
             parent_dir = os.path.dirname(self.output_dir)
@@ -114,8 +124,8 @@ class SeparationThread(threading.Thread):
             
             logger = logging.getLogger("audio_separator")
             logger.setLevel(logging.INFO)
-            for h in logger.handlers:
-                logger.removeHandler(h)
+            while logger.handlers:
+                logger.removeHandler(logger.handlers[0])
             
             handler = GuiLogHandler(notify_func=self.post_log)
             formatter = logging.Formatter('%(message)s [%(asctime)s - %(levelname)s]', datefmt='%Y-%m-%d %H:%M:%S')
@@ -127,12 +137,12 @@ class SeparationThread(threading.Thread):
             if self.enable_preview:
                 os.makedirs(self.output_dir, exist_ok=True)
                 if self.preview_mode == "final":
-                    self.post_log("Preview mode active: cutting final 30 seconds of audio.")
+                    self.post_log(i18n.tr("log_preview_final"))
                 else:
-                    self.post_log("Preview mode active: cutting first 30 seconds of audio.")
+                    self.post_log(i18n.tr("log_preview_first"))
 
             if self.chunk_duration:
-                self.post_log(f"Chunking enabled: {self.chunk_duration}s per segment.")
+                self.post_log(i18n.tr("log_chunk_enabled", seconds=self.chunk_duration))
 
             from gui.utils import get_app_data_dir
             model_dir = os.path.join(get_app_data_dir(), 'models')
@@ -144,767 +154,22 @@ class SeparationThread(threading.Thread):
             )
 
             # --- RUNTIME LIBRARY PATCH (MONKEY-PATCH) ---
-            # We augment the library's internal model registry in memory to support custom models.
+            # Custom model support is implemented in gui/audio_patches.py (AudioPatches).
+            from gui.audio_patches import AudioPatches
+
+            patcher = AudioPatches(model_dir=model_dir, parent=self.parent, log=self.post_log)
             try:
-                original_list_func = separator.list_supported_model_files
-                def patched_list_supported_model_files():
-                    models = original_list_func()
-                    
-                    # Custom Roformers (MDXC) to inject
-                    custom_mdxc = {
-                        "Roformer Model: MelBand Roformer Deux | (by becruily)": {
-                            "filename": "mel_band_roformer_becruily_deux.ckpt",
-                            "download_files": ["mel_band_roformer_becruily_deux.ckpt", "config_deux_becruily.yaml"],
-                            "is_roformer": True
-                        },
-                        "Roformer Model: MelBand Roformer Karaoke | (by becruily)": {
-                            "filename": "mel_band_roformer_karaoke_becruily.ckpt",
-                            "download_files": ["mel_band_roformer_karaoke_becruily.ckpt", "config_mel_band_roformer_karaoke_becruily.yaml"],
-                            "is_roformer": True
-                        },
-                        "Roformer Model: MelBand Roformer Guitar | (by becruily)": {
-                            "filename": "mel_band_roformer_guitar_becruily.ckpt",
-                            "download_files": ["mel_band_roformer_guitar_becruily.ckpt", "mel_band_roformer_guitar_becruily.yaml"],
-                            "is_roformer": True
-                        },
-                        "Roformer Model: BS-Roformer Karaoke | (by frazer & becruily)": {
-                            "filename": "bs_roformer_karaoke_frazer_becruily.ckpt",
-                            "download_files": ["bs_roformer_karaoke_frazer_becruily.ckpt", "bs_roformer_karaoke_frazer_becruily.yaml"],
-                            "is_roformer": True
-                        },
-                        "Roformer Model: Mel-Roformer-Crowd-Aufr33-Viperx": {
-                            "filename": "mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144.ckpt",
-                            "download_files": ["mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144.ckpt", "mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144_config.yaml"],
-                            "is_roformer": True
-                        },
-                        "Roformer Model: Denoise Advanced | (by aufr33)": {
-                            "filename": "denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt",
-                            "download_files": ["denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt", "denoise_mel_band_roformer_aufr33_sdr_27.9959.yaml"],
-                            "is_roformer": True
-                        },
-                        "Roformer Model: Gabox Instrumental V10": {
-                            "filename": "inst_gaboxFlowersV10.ckpt",
-                            "download_files": ["inst_gaboxFlowersV10.ckpt", "inst_gaboxFlowersV10.yaml"],
-                            "is_roformer": True
-                        },
-                        "Roformer Model: Gabox Experimental Inst_Fv8": {
-                            "filename": "Inst_Fv8.ckpt",
-                            "download_files": ["Inst_Fv8.ckpt", "Inst_Fv8.yaml"],
-                            "is_roformer": True
-                        },
-                        "Roformer Model: Lead Vocal Dereverb | (by GaboxR67)": {
-                            "filename": "Lead_VocalDereverb.ckpt",
-                            "download_files": ["Lead_VocalDereverb.ckpt", "Lead_VocalDereverb.yaml"],
-                            "is_roformer": True
-                        },
-                        "Roformer Model: Last BS Roformer | (by GaboxR67)": {
-                            "filename": "last_bs_roformer.ckpt",
-                            "download_files": ["last_bs_roformer.ckpt", "last_bs_roformer.yaml"],
-                            "is_roformer": True
-                        }
-                    }
-                    
-                    if "MDXC" not in models:
-                        models["MDXC"] = {}
-                    models["MDXC"].update(custom_mdxc)
-                    
-                    # Inject all models from parent's downloadable_models so they are natively supported
-                    if getattr(self, "parent", None) and hasattr(self.parent, "downloadable_models"):
-                        for friendly_name, file_info in self.parent.downloadable_models.items():
-                            model_type = "MDXC" # Default
-                            target_file = friendly_name
-                            
-                            for fname in file_info.keys():
-                                if fname.endswith('.onnx'):
-                                    model_type = "MDX"
-                                    target_file = fname
-                                    break
-                                elif fname.endswith('.pth'):
-                                    model_type = "VR"
-                                    target_file = fname
-                                    break
-                                elif any(fname.endswith(ext) for ext in ['.ckpt', '.th']):
-                                    target_file = fname
-                                    if fname.endswith('.th') or ('demucs' in friendly_name.lower()):
-                                        model_type = "Demucs"
-                                    else:
-                                        model_type = "MDXC"
-                                    break
-                            
-                            if model_type == "Demucs":
-                                for fname in file_info.keys():
-                                    if fname.endswith('.yaml'):
-                                        target_file = fname
-                                        break
-                                        
-                            if model_type not in models:
-                                models[model_type] = {}
-                                
-                            models[model_type][friendly_name] = {
-                                "filename": target_file,
-                                "download_files": list(file_info.keys())
-                            }
-                            
-                            if model_type == "MDXC" and (
-                                "roformer" in friendly_name.lower() or "roformer" in target_file.lower() or
-                                "bandit" in friendly_name.lower() or "bandit" in target_file.lower() or
-                                "scnet" in friendly_name.lower() or "scnet" in target_file.lower()
-                            ):
-                                models[model_type][friendly_name]["is_roformer"] = True
-                            
-                    # Inject models from downloadable_models_by_file (ensures newly added pcunwa models are found)
-                    if getattr(self, "parent", None) and hasattr(self.parent, "model_manager"):
-                        mm = self.parent.model_manager
-                        for filename, file_info in mm.downloadable_models_by_file.items():
-                            model_type = "MDXC"
-                            if filename.endswith('.onnx'): model_type = "MDX"
-                            elif filename.endswith('.pth'): model_type = "VR"
-                            elif filename.endswith('.th') or 'demucs' in filename.lower(): model_type = "Demucs"
-
-                            if model_type not in models: models[model_type] = {}
-                            
-                            # Avoid duplicates
-                            if any(m.get("filename") == filename for m in models[model_type].values()):
-                                continue
-                                
-                            models[model_type][filename] = {
-                                "filename": filename,
-                                "download_files": list(file_info.keys())
-                            }
-                            if model_type == "MDXC" and (
-                                "roformer" in filename.lower() or
-                                "bandit" in filename.lower() or
-                                "scnet" in filename.lower()
-                            ):
-                                models[model_type][filename]["is_roformer"] = True
-                    return models
-                
-                # Apply patch to the instance
-                separator.list_supported_model_files = patched_list_supported_model_files
-
-                original_load_model_wrapper = separator.load_model
-                def patched_load_model_wrapper(model_filename="model_bs_roformer_ep_317_sdr_12.9755.ckpt"):
-                    # Bandit and SCNet are now supported through the loader patch below.
-                    return original_load_model_wrapper(model_filename)
-                
-                separator.load_model = patched_load_model_wrapper
-
-                # Patch load_model_data_from_yaml to route Bandit/SCNet through MDXCSeparator using is_roformer=True
-                original_load_yaml = separator.load_model_data_from_yaml
-                def patched_load_yaml(yaml_config_filename):
-                    model_data = original_load_yaml(yaml_config_filename)
-                    
-                    yaml_lower = yaml_config_filename.lower()
-                    is_bandit_or_scnet = "bandit" in yaml_lower or "scnet" in yaml_lower
-                    if not is_bandit_or_scnet and os.path.exists(yaml_config_filename):
-                        try:
-                            with open(yaml_config_filename, 'r', encoding='utf-8') as yf:
-                                content = yf.read()
-                            if "cls: Bandit" in content or "cls: BaseBandit" in content or "MultiMaskMultiSourceBandSplitRNN" in content:
-                                is_bandit_or_scnet = True
-                            if "cls: SCNet" in content or "type: scnet" in content:
-                                is_scnet = True
-                        except Exception:
-                            pass
-                            
-                    if is_bandit_or_scnet:
-                        model_data["is_roformer"] = True
-                        
-                        # Populate model sub-dict
-                        if "model" not in model_data:
-                            model_data["model"] = {}
-                        elif not isinstance(model_data["model"], dict):
-                            model_data["model"] = {"original_value": model_data["model"]}
-                            
-                        if "stft_hop_length" not in model_data["model"]:
-                            hop = (model_data.get("kwargs", {}).get("hop_length") or 
-                                   model_data.get("model", {}).get("hop_size") or 512)
-                            model_data["model"]["stft_hop_length"] = hop
-                            
-                    return model_data
-                separator.load_model_data_from_yaml = patched_load_yaml
-
-                # --- ROFORMER CONFIG DIRECT-READ PATCH ---
-                # audio-separator has a bug: when loading a YAML that has 'model: { dim: 256, ... }'
-                # the ConfigurationNormalizer fails to flatten it properly and uses wrong defaults.
-                # We patch RoformerLoader.load_model to detect this case and read params from the
-                # YAML directly, keyed by model_path, before calling the broken normalizer.
-                import yaml as _yaml
-
-                # Register a constructor for !!python/tuple (used in some model YAML files)
-                def _tuple_constructor(loader, node):
-                    return tuple(loader.construct_sequence(node))
-                _yaml.SafeLoader.add_constructor(
-                    'tag:yaml.org,2002:python/tuple', _tuple_constructor
-                )
-                try:
-                    _yaml.FullLoader.add_constructor(
-                        'tag:yaml.org,2002:python/tuple', _tuple_constructor
-                    )
-                except Exception:
-                    pass
-
-                from audio_separator.separator.roformer.roformer_loader import RoformerLoader
-                from audio_separator.separator.uvr_lib_v5.roformer.mel_band_roformer import MelBandRoformer
-
-                original_load_model = RoformerLoader.load_model
-                model_dir_for_patch = model_dir
-
-                # Map from model filename to its corresponding .yaml filename
-                custom_ckpt_to_yaml = {
-                    'mel_band_roformer_guitar_becruily.ckpt':          'mel_band_roformer_guitar_becruily.yaml',
-                    'mel_band_roformer_karaoke_becruily.ckpt':         'config_mel_band_roformer_karaoke_becruily.yaml',
-                    'config_mel_band_roformer_karaoke_becruily.yaml':  'config_mel_band_roformer_karaoke_becruily.yaml',
-                    'mel_band_roformer_becruily_deux.ckpt':            'config_deux_becruily.yaml',
-                    'mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144.ckpt': 
-                                            'mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144_config.yaml',
-                    # FNO (Fourier Neural Operator) model
-                    'bs_roformer_fno.ckpt':                            'bs_roformer_fno.yaml',
-                    # Kim-Mel-Band Roformer fine-tuned variants (all share the same config)
-                    'kimmel_unwa_ft.ckpt':                             'config_kimmel_unwa_ft.yaml',
-                    'kimmel_unwa_ft2.ckpt':                            'config_kimmel_unwa_ft.yaml',
-                    'kimmel_unwa_ft2_bleedless.ckpt':                  'config_kimmel_unwa_ft.yaml',
-                    'kimmel_unwa_ft3_prev.ckpt':                       'config_kimmel_unwa_ft.yaml',
-                    # Sucial Dereverb/Echo models
-                    'dereverb-echo_mel_band_roformer_sdr_10.0169.ckpt': 'config_dereverb-echo_mel_band_roformer.yaml',
-                    'dereverb_echo_mbr_v2_sdr_dry_13.4843.ckpt':       'config_dereverb_echo_mbr_v2.yaml',
-                    # AEmotionStudio Multistem (.safetensors)
-                    'bs_roformer_multistem.safetensors':                'bs_roformer_multistem_config.yaml',
-                    # Bandit/SCNet models
-                    'checkpoint-multi_fixed.ckpt':                     'config_dnr_bandit_v2_mus64.yaml',
-                    'model_bandit_plus_dnr_sdr_11.47.ckpt':            'config_dnr_bandit_bsrnn_multi_mus64.yaml',
-                    'scnet_checkpoint_musdb18.ckpt':                   'config_musdb18_scnet.yaml',
-                    'SCNet-large_starrytong_fixed.ckpt':               'config_musdb18_scnet_large_starrytong.yaml',
-                    'model_scnet_sdr_9.3244.ckpt':                      'config_musdb18_scnet_large.yaml',
-                    'model_scnet_ep_54_sdr_9.8051.ckpt':                'config_musdb18_scnet_xl.yaml',
-                }
-
-                # --- PYTORCH 2.6+ WEIGHTS_ONLY FIX (Hardened) ---
-                import torch
-                import torch.serialization
-                
-                # Allowlist common Roformer globals globally
-                try:
-                    # GELU is often the culprit in UVR models
-                    if hasattr(torch.serialization, 'add_safe_globals'):
-                        torch.serialization.add_safe_globals([torch._C._nn.gelu, torch.nn.GELU])
-                except Exception:
-                    pass
-
-                _original_torch_load = torch.load
-                _original_serialization_load = torch.serialization.load
-
-                def _is_safetensors_file(path_arg):
-                    """Detect safetensors format by magic bytes (first 8 bytes are a uint64 length prefix)."""
-                    try:
-                        if isinstance(path_arg, str) and os.path.isfile(path_arg):
-                            with open(path_arg, 'rb') as _f:
-                                header = _f.read(1)
-                            # safetensors files start with a uint64 little-endian length.
-                            # Pickle files start with 0x80 (128). safetensors first bytes
-                            # are never 0x80, and torch.load fails with 'invalid load key'.
-                            # Safest check: the file extension or the path ends with .safetensors
-                            return path_arg.endswith('.safetensors')
-                    except Exception:
-                        pass
-                    return False
-
-                def _load_safetensors(path_arg, device='cpu'):
-                    from safetensors.torch import load_file as _st_load
-                    dev = str(device) if not isinstance(device, str) else device
-                    return _st_load(path_arg, device=dev)
-
-                def _safe_torch_load(*args, **kwargs):
-                    # If the first argument looks like a safetensors path, redirect
-                    path_arg = args[0] if args else kwargs.get('f', None)
-                    if path_arg and _is_safetensors_file(path_arg):
-                        device = kwargs.get('map_location', 'cpu')
-                        return _load_safetensors(path_arg, device)
-                    if 'weights_only' not in kwargs:
-                        kwargs['weights_only'] = False
-                    try:
-                        return _original_torch_load(*args, **kwargs)
-                    except TypeError:
-                        if 'weights_only' in kwargs:
-                            del kwargs['weights_only']
-                        return _original_torch_load(*args, **kwargs)
-
-                def _safe_serialization_load(*args, **kwargs):
-                    path_arg = args[0] if args else kwargs.get('f', None)
-                    if path_arg and _is_safetensors_file(path_arg):
-                        device = kwargs.get('map_location', 'cpu')
-                        return _load_safetensors(path_arg, device)
-                    if 'weights_only' not in kwargs:
-                        kwargs['weights_only'] = False
-                    try:
-                        return _original_serialization_load(*args, **kwargs)
-                    except TypeError:
-                        if 'weights_only' in kwargs:
-                            del kwargs['weights_only']
-                        return _original_serialization_load(*args, **kwargs)
-
-                torch.load = _safe_torch_load
-                torch.serialization.load = _safe_serialization_load
-
-                def patched_load_model(self_loader, model_path, config, device='cpu'):
-                    import torch, logging as _logging
-                    _log = _logging.getLogger(__name__)
-
-                    ckpt_filename = os.path.basename(model_path)
-                    yaml_filename = custom_ckpt_to_yaml.get(ckpt_filename)
-
-                    if not yaml_filename:
-                        # Try to find it in ModelManager's registries (closure access to self.parent)
-                        if getattr(self, "parent", None) and hasattr(self.parent, "model_manager"):
-                            mm = self.parent.model_manager
-                            info = mm.downloadable_models_by_file.get(ckpt_filename)
-                            if info:
-                                for f in info.keys():
-                                    if f.endswith('.yaml'):
-                                        yaml_filename = f
-                                        break
-                    
-                    is_bandit = False
-                    is_scnet = False
-                    
-                    if yaml_filename:
-                        yaml_lower = yaml_filename.lower()
-                        if "bandit" in yaml_lower:
-                            is_bandit = True
-                        elif "scnet" in yaml_lower:
-                            is_scnet = True
-                    else:
-                        ckpt_lower = ckpt_filename.lower()
-                        if "bandit" in ckpt_lower:
-                            is_bandit = True
-                        elif "scnet" in ckpt_lower:
-                            is_scnet = True
-                            
-                    yaml_path = None
-                    if yaml_filename:
-                        yaml_path = os.path.join(model_dir_for_patch, yaml_filename)
-                        if not os.path.exists(yaml_path):
-                            yaml_path = yaml_filename
-                    else:
-                        # Fallback candidate
-                        base_ckpt = os.path.splitext(ckpt_filename)[0]
-                        candidate = os.path.join(os.path.dirname(model_path), f"{base_ckpt}.yaml")
-                        if os.path.exists(candidate):
-                            yaml_path = candidate
-
-                    if yaml_path and os.path.exists(yaml_path):
-                        try:
-                            with open(yaml_path, 'r', encoding='utf-8') as yf:
-                                content = yf.read()
-                            if "cls: Bandit" in content or "cls: BaseBandit" in content or "MultiMaskMultiSourceBandSplitRNN" in content:
-                                is_bandit = True
-                            if "cls: SCNet" in content or "type: scnet" in content:
-                                is_scnet = True
-                        except Exception:
-                            pass
-
-                    if is_bandit or is_scnet:
-                        try:
-                            _log.info(f"[Patch] Loading ZFTurbo architecture for {ckpt_filename}...")
-                            
-                            import zipfile, shutil, requests, sys
-                            from gui.utils import get_app_data_dir
-                            app_data = get_app_data_dir()
-                            dest_dir = os.path.join(app_data, "models_src")
-                            models_dir = os.path.join(dest_dir, "models")
-                            
-                            if not os.path.exists(models_dir):
-                                _log.info("ZFTurbo models directory not found locally. Fetching architecture from Github...")
-                                os.makedirs(dest_dir, exist_ok=True)
-                                zip_path = os.path.join(dest_dir, "repo.zip")
-                                url = "https://github.com/ZFTurbo/Music-Source-Separation-Training/archive/refs/heads/main.zip"
-                                response = requests.get(url, timeout=45, stream=True)
-                                response.raise_for_status()
-                                with open(zip_path, 'wb') as f:
-                                    shutil.copyfileobj(response.raw, f)
-                                    
-                                _log.info("Extracting ZFTurbo model files...")
-                                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                                    first_member = zip_ref.namelist()[0]
-                                    root_dir = first_member.split('/')[0] + '/'
-                                    prefix = root_dir + "models/"
-                                    for member in zip_ref.namelist():
-                                        if member.startswith(prefix):
-                                            rel_path = member[len(root_dir):]
-                                            target_path = os.path.join(dest_dir, rel_path)
-                                            if member.endswith('/'):
-                                                os.makedirs(target_path, exist_ok=True)
-                                            else:
-                                                os.makedirs(os.path.dirname(target_path), exist_ok=True)
-                                                with zip_ref.open(member) as source, open(target_path, 'wb') as target:
-                                                    shutil.copyfileobj(source, target)
-                                try:
-                                    os.remove(zip_path)
-                                except Exception:
-                                    pass
-                                _log.info("ZFTurbo architecture successfully initialized.")
-                                
-                            abs_dest_dir = os.path.abspath(dest_dir)
-                            if abs_dest_dir not in sys.path:
-                                sys.path.insert(0, abs_dest_dir)
-                                
-                            # Mock pytorch_lightning, torchmetrics, asteroid
-                            if 'pytorch_lightning' not in sys.modules:
-                                import types
-                                pl = types.ModuleType("pytorch_lightning")
-                                pl.LightningModule = torch.nn.Module
-                                pl.LightningDataModule = object
-                                pl_utils = types.ModuleType("pytorch_lightning.utilities")
-                                pl_utils_types = types.ModuleType("pytorch_lightning.utilities.types")
-                                pl_utils_types.STEP_OUTPUT = None
-                                sys.modules['pytorch_lightning'] = pl
-                                sys.modules['pytorch_lightning.utilities'] = pl_utils
-                                sys.modules['pytorch_lightning.utilities.types'] = pl_utils_types
-                                
-                            if 'torchmetrics' not in sys.modules:
-                                import types
-                                class DummyTM(types.ModuleType):
-                                    def __init__(self, name):
-                                        super().__init__(name)
-                                        self.Metric = torch.nn.Module
-                                        class DummyMetricCollection:
-                                            def __init__(self, *args, **kwargs):
-                                                pass
-                                        self.MetricCollection = DummyMetricCollection
-                                    def __getattr__(self, name):
-                                        if name.startswith('__'):
-                                            raise AttributeError(name)
-                                        if name[0].isupper():
-                                            return torch.nn.Module
-                                        return lambda *args, **kwargs: None
-                                        
-                                tm = DummyTM("torchmetrics")
-                                tm_functional = DummyTM("torchmetrics.functional")
-                                sys.modules['torchmetrics'] = tm
-                                sys.modules['torchmetrics.functional'] = tm_functional
-                                
-                            if 'asteroid' not in sys.modules:
-                                class DummyAsteroid:
-                                    class losses:
-                                        pass
-                                sys.modules['asteroid'] = DummyAsteroid
-                                
-                            if 'spafe' not in sys.modules:
-                                import types
-                                spafe_mod = types.ModuleType("spafe")
-                                spafe_fbanks = types.ModuleType("spafe.fbanks")
-                                spafe_fbanks_bark = types.ModuleType("spafe.fbanks.bark_fbanks")
-                                spafe_utils = types.ModuleType("spafe.utils")
-                                spafe_utils_conv = types.ModuleType("spafe.utils.converters")
-                                
-                                spafe_fbanks_bark.bark_filter_banks = lambda *args, **kwargs: (None, None)
-                                spafe_utils_conv.erb2hz = lambda *args, **kwargs: None
-                                spafe_utils_conv.hz2bark = lambda *args, **kwargs: None
-                                spafe_utils_conv.hz2erb = lambda *args, **kwargs: None
-                                
-                                spafe_mod.fbanks = spafe_fbanks
-                                spafe_fbanks.bark_fbanks = spafe_fbanks_bark
-                                spafe_mod.utils = spafe_utils
-                                spafe_utils.converters = spafe_utils_conv
-                                
-                                sys.modules['spafe'] = spafe_mod
-                                sys.modules['spafe.fbanks'] = spafe_fbanks
-                                sys.modules['spafe.fbanks.bark_fbanks'] = spafe_fbanks_bark
-                                sys.modules['spafe.utils'] = spafe_utils
-                                sys.modules['spafe.utils.converters'] = spafe_utils_conv
-
-                            if 'pedalboard' not in sys.modules:
-                                import types
-                                pb_mod = types.ModuleType("pedalboard")
-                                class DummyReverb:
-                                    def __init__(self, *args, **kwargs): pass
-                                    def process(self, *args, **kwargs): pass
-                                pb_mod.Reverb = DummyReverb
-                                sys.modules['pedalboard'] = pb_mod
-
-                            if 'torch_audiomentations' not in sys.modules:
-                                import types
-                                class DummyTAM(types.ModuleType):
-                                    def __getattr__(self, name):
-                                        if name.startswith('__'):
-                                            raise AttributeError(name)
-                                        return lambda *args, **kwargs: None
-                                sys.modules['torch_audiomentations'] = DummyTAM("torch_audiomentations")
-
-                            with open(yaml_path, 'r', encoding='utf-8') as yf:
-                                raw_yaml = _yaml.load(yf, Loader=_yaml.FullLoader)
-                                
-                            if 'model' in raw_yaml and isinstance(raw_yaml['model'], dict):
-                                model_kwargs = raw_yaml['model']
-                            elif 'kwargs' in raw_yaml and isinstance(raw_yaml['kwargs'], dict):
-                                model_kwargs = raw_yaml['kwargs']
-                            else:
-                                model_kwargs = raw_yaml
-                                
-                            # Clean constructor args defensively
-                            for k in list(model_kwargs.keys()):
-                                if k in ['cls', 'type']:
-                                    del model_kwargs[k]
-                                    
-                            if is_bandit:
-                                if "MultiMaskMultiSourceBandSplitRNN" in str(raw_yaml):
-                                    from models.bandit.core.model import MultiMaskMultiSourceBandSplitRNNSimple
-                                    model = MultiMaskMultiSourceBandSplitRNNSimple(**model_kwargs)
-                                else:
-                                    from models.bandit_v2.bandit import Bandit
-                                    model = Bandit(**model_kwargs)
-                            else:  # is_scnet
-                                if "scnet_masked" in yaml_path.lower() or "SCNetMasked" in str(raw_yaml):
-                                    from models.scnet.scnet_masked import SCNetMasked
-                                    model = SCNetMasked(**model_kwargs)
-                                elif "scnet_tran" in yaml_path.lower() or "SCNetTran" in str(raw_yaml):
-                                    from models.scnet.scnet_tran import SCNetTran
-                                    model = SCNetTran(**model_kwargs)
-                                else:
-                                    from models.scnet.scnet import SCNet
-                                    model = SCNet(**model_kwargs)
-                                    
-                            checkpoint = torch.load(model_path, map_location='cpu')
-                            state_dict = checkpoint.get('state_dict', checkpoint.get('model', checkpoint))
-                            
-                            new_state_dict = {}
-                            for k, v in state_dict.items():
-                                if k.startswith("model."):
-                                    new_state_dict[k[6:]] = v
-                                else:
-                                    new_state_dict[k] = v
-                                    
-                            model.load_state_dict(new_state_dict)
-                            model.to(device).eval()
-                            
-                            from audio_separator.separator.roformer.model_loading_result import ModelLoadingResult, ImplementationVersion
-                            from ml_collections import ConfigDict
-                            cfg = ConfigDict(patched_load_yaml(yaml_path))
-                            
-                            result = ModelLoadingResult.success_result(
-                                model=model,
-                                implementation=ImplementationVersion.NEW,
-                                config=cfg,
-                            )
-                            _log.info(f"[Patch] ZFTurbo model loaded successfully for {ckpt_filename}!")
-                            return result
-                            
-                        except Exception as e:
-                            _log.error(f"[Patch] Failed to load ZFTurbo model for {ckpt_filename}: {e}", exc_info=True)
-                            raise RuntimeError(f"Could not load custom model {ckpt_filename}: {e}") from e
-
-                    if yaml_filename:
-                        yaml_path = os.path.join(model_dir_for_patch, yaml_filename)
-                        if os.path.exists(yaml_path):
-                            try:
-                                with open(yaml_path, 'r') as yf:
-                                    raw_yaml = _yaml.safe_load(yf)
-                                # Extract the model section (where real arch params live)
-                                model_section = raw_yaml.get('model', raw_yaml)
-                                _log.warning(
-                                    f"[Patch] Direct YAML read for {ckpt_filename}: "
-                                    f"dim={model_section.get('dim')}, "
-                                    f"depth={model_section.get('depth')}, "
-                                    f"num_bands={model_section.get('num_bands', model_section.get('num_subbands'))}"
-                                )
-
-                                # Determine model type and prepare specific args
-                                is_bs = 'freqs_per_bands' in model_section
-                                
-                                # Base arguments common to both
-                                model_args = {
-                                    'dim': model_section['dim'],
-                                    'depth': model_section['depth'],
-                                    'stereo': model_section.get('stereo', False),
-                                    'num_stems': model_section.get('num_stems', 2),
-                                    'time_transformer_depth': model_section.get('time_transformer_depth', 2),
-                                    'freq_transformer_depth': model_section.get('freq_transformer_depth', 2),
-                                    'dim_head': model_section.get('dim_head', 64),
-                                    'heads': model_section.get('heads', 8),
-                                    'attn_dropout': model_section.get('attn_dropout', 0.0),
-                                    'ff_dropout': model_section.get('ff_dropout', 0.0),
-                                    'flash_attn': model_section.get('flash_attn', True),
-                                    'mlp_expansion_factor': model_section.get('mlp_expansion_factor', 4),
-                                }
-                                
-                                # Add optional STFT/Loss params if present
-                                for opt_key in [
-                                    'mask_estimator_depth', 'stft_n_fft', 'stft_hop_length',
-                                    'stft_win_length', 'stft_normalized', 'sample_rate',
-                                    'multi_stft_resolution_loss_weight', 'multi_stft_resolutions_window_sizes',
-                                    'multi_stft_hop_size', 'multi_stft_normalized', 'match_input_audio_length',
-                                    'sage_attention', 'zero_dc', 'use_torch_checkpoint', 'skip_connection'
-                                ]:
-                                    if opt_key in model_section:
-                                        model_args[opt_key] = model_section[opt_key]
-
-                                if is_bs:
-                                    from audio_separator.separator.uvr_lib_v5.roformer.bs_roformer import BSRoformer
-                                    model_args['freqs_per_bands'] = tuple(model_section['freqs_per_bands'])
-                                    model = BSRoformer(**model_args)
-                                else:
-                                    model_args['num_bands'] = model_section.get('num_bands', model_section.get('num_subbands', 60))
-                                    model = MelBandRoformer(**model_args)
-
-                                if os.path.exists(model_path):
-                                    # Load weights — supports both .safetensors and .ckpt/.pth formats
-                                    if model_path.endswith('.safetensors'):
-                                        try:
-                                            from safetensors.torch import load_file as _st_load
-                                            sd = _st_load(model_path, device=str(device))
-                                        except ImportError:
-                                            raise RuntimeError(
-                                                "safetensors library not found. "
-                                                "Install it with: pip install safetensors"
-                                            )
-                                    else:
-                                        try:
-                                            state_dict = torch.load(model_path, map_location=device, weights_only=False)
-                                        except TypeError:
-                                            state_dict = torch.load(model_path, map_location=device)
-                                        sd = state_dict.get('state_dict', state_dict.get('model', state_dict))
-                                    
-                                    # Detect custom architecture from weight key signatures
-                                    has_segm = any(".segm." in k for k in sd.keys())
-                                    has_fno  = any("fno_blocks" in k for k in sd.keys())
-                                    
-                                    if has_segm:
-                                        _log.info(f"[Patch] HyperACE/Segm architecture detected for {ckpt_filename}. Remapping weights.")
-                                        new_sd = {}
-                                        for k, v in sd.items():
-                                            new_k = k.replace(".segm.hyperace.", ".").replace(".segm.", ".")
-                                            new_sd[new_k] = v
-                                        model.load_state_dict(new_sd, strict=False)
-
-                                    elif has_fno:
-                                        _log.info(f"[Patch] FNO architecture detected for {ckpt_filename}. Rebuilding MaskEstimator with FNO1d.")
-                                        # Replace MaskEstimator with the FNO version matching pcunwa's training code exactly:
-                                        # https://huggingface.co/pcunwa/BS-Roformer-Inst-FNO
-                                        try:
-                                            from neuralop.models import FNO1d
-                                            from torch import nn as _nn
-                                            from torch.nn import Module as _Module, ModuleList as _ModuleList
-                                            from einops import rearrange as _rearrange
-
-                                            class FNOMaskEstimator(_Module):
-                                                def __init__(self, dim, dim_inputs, depth, mlp_expansion_factor=4):
-                                                    super().__init__()
-                                                    self.dim_inputs = dim_inputs
-                                                    self.to_freqs = _ModuleList([])
-                                                    for dim_in in dim_inputs:
-                                                        mlp = _nn.Sequential(
-                                                            FNO1d(
-                                                                n_modes_height=64,
-                                                                hidden_channels=dim,
-                                                                in_channels=dim,
-                                                                out_channels=dim_in * 2,
-                                                                lifting_channels=dim,
-                                                                projection_channels=dim,
-                                                                n_layers=3,
-                                                                separable=True,
-                                                            ),
-                                                            _nn.GLU(dim=-2),
-                                                        )
-                                                        self.to_freqs.append(mlp)
-
-                                                def forward(self, x):
-                                                    x = x.unbind(dim=-2)
-                                                    outs = []
-                                                    for band_features, mlp in zip(x, self.to_freqs):
-                                                        band_features = _rearrange(band_features, 'b t c -> b c t')
-                                                        with torch.autocast(device_type='cuda', enabled=False, dtype=torch.float32):
-                                                            freq_out = mlp(band_features).float()
-                                                        freq_out = _rearrange(freq_out, 'b c t -> b t c')
-                                                        outs.append(freq_out)
-                                                    return torch.cat(outs, dim=-1)
-
-                                            # Compute the per-band frequency dims (same formula as BSRoformer)
-                                            audio_channels = 2 if model_section.get('stereo', False) else 1
-                                            freqs_per_bands_with_complex = tuple(
-                                                2 * f * audio_channels
-                                                for f in model_section['freqs_per_bands']
-                                            )
-                                            # Rebuild mask_estimators on the already-constructed BSRoformer
-                                            model.mask_estimators = _nn.ModuleList([
-                                                FNOMaskEstimator(
-                                                    dim=model_section['dim'],
-                                                    dim_inputs=freqs_per_bands_with_complex,
-                                                    depth=model_section.get('mask_estimator_depth', 2),
-                                                    mlp_expansion_factor=model_section.get('mlp_expansion_factor', 4),
-                                                )
-                                                for _ in range(model_section.get('num_stems', 1))
-                                            ])
-                                            model.load_state_dict(sd, strict=True)
-                                            _log.info(f"[Patch] FNO MaskEstimator loaded successfully for {ckpt_filename}.")
-                                        except Exception as fno_err:
-                                            _log.warning(f"[Patch] FNO rebuild failed ({fno_err}), falling back to strict=False.")
-                                            model.load_state_dict(sd, strict=False)
-
-                                    else:
-                                        # Standard model — strict load with graceful retry
-                                        try:
-                                            model.load_state_dict(sd, strict=True)
-                                        except RuntimeError as strict_err:
-                                            _log.warning(f"[Patch] Strict load failed for {ckpt_filename}, retrying with strict=False: {strict_err}")
-                                            model.load_state_dict(sd, strict=False)
-                                    
-                                model.to(device).eval()
-
-
-                                from audio_separator.separator.roformer.model_loading_result import ModelLoadingResult, ImplementationVersion
-                                result = ModelLoadingResult.success_result(
-                                    model=model,
-                                    implementation=ImplementationVersion.NEW,
-                                    config=model_section,
-                                )
-                                return result
-                            except Exception as direct_err:
-                                _log.warning(f"[Patch] Direct YAML load failed for {ckpt_filename}: {direct_err}. Falling back.")
-
-                    # Fall back to original implementation for all other models
-                    return original_load_model(self_loader, model_path, config, device)
-
-                RoformerLoader.load_model = patched_load_model
-
-                # --- MASK ESTIMATOR mlp_expansion_factor PROPAGATION FIX ---
-                # Bug in the library: MelBandRoformer stores mlp_expansion_factor but
-                # never passes it to MaskEstimator, which always uses its default of 4.
-                # Models like Becruily Guitar use mlp_expansion_factor=1, causing a size
-                # mismatch ([1040, 1024] vs expected [1040, 256]).
-                # Fix: patch MelBandRoformer.__init__ to temporarily override
-                # MaskEstimator so it captures the correct factor from the outer scope.
-                from audio_separator.separator.uvr_lib_v5.roformer.mel_band_roformer import (
-                    MelBandRoformer as _MBR, MaskEstimator as _ME
-                )
-
-                _original_mbr_init = _MBR.__init__
-                _original_me_init = _ME.__init__
-
-                def _patched_mbr_init(self_mbr, dim, *, mlp_expansion_factor=4, **kwargs):
-                    # Temporarily wrap MaskEstimator.__init__ to inject the right factor
-                    _factor = mlp_expansion_factor
-
-                    def _wrapped_me_init(self_me, dim, dim_inputs, depth, mlp_expansion_factor=4):
-                        _original_me_init(self_me, dim, dim_inputs, depth, _factor)
-
-                    _ME.__init__ = _wrapped_me_init
-                    try:
-                        _original_mbr_init(self_mbr, dim, mlp_expansion_factor=mlp_expansion_factor, **kwargs)
-                    finally:
-                        _ME.__init__ = _original_me_init  # Always restore
-
-                _MBR.__init__ = _patched_mbr_init
-
+                patcher.apply(separator)
             except Exception as patch_err:
-                self.post_log(f"Warning: Runtime patch failed: {patch_err}. Custom models might fail.")
+                self.post_log(i18n.tr("log_patch_failed", error=patch_err))
             # --- END OF PATCHES ---
 
             total_files = len(self.input_files)
             for file_idx, current_input_file in enumerate(self.input_files, 1):
                 if self._stop_event.is_set():
                     break
-                self.post_log(f"\n--- Processing file {file_idx}/{total_files} ---")
-                self.post_log(f"File: {current_input_file}")
+                self.post_log(i18n.tr("log_processing_file", index=file_idx, total=total_files))
+                self.post_log(i18n.tr("log_file", file=current_input_file))
                 
                 # --- Create a safe ASCII file path for processing to bypass FFmpeg/AudioSeparator unicode issues ---
                 # We also convert to WAV, downmix to stereo (-ac 2), and strip video streams (-vn).
@@ -926,7 +191,9 @@ class SeparationThread(threading.Thread):
                         check=True, capture_output=True
                     )
                 except Exception as e:
-                    self.post_log(f"FFmpeg conversion notice: {e}. Falling back to direct copy.")
+                    self.post_log(i18n.tr("log_ffmpeg_notice", error=e))
+
+                if not os.path.exists(safe_input_file):
                     _, input_ext = os.path.splitext(current_input_file)
                     safe_input_file = os.path.join(tempfile.gettempdir(), f"{safe_base}{input_ext}")
                     shutil.copy2(current_input_file, safe_input_file)
@@ -952,7 +219,7 @@ class SeparationThread(threading.Thread):
                             )
                             os.replace(norm_file, safe_input_file)
                 except Exception as norm_err:
-                    self.post_log(f"Normalization skipped: {norm_err}")
+                    self.post_log(i18n.tr("log_normalization_skipped", error=norm_err))
 
                 base_input_name = os.path.splitext(os.path.basename(current_input_file))[0]
 
@@ -973,7 +240,6 @@ class SeparationThread(threading.Thread):
                     preset_type = self.preset_config.get("type", "chain")
                     if preset_type == "single":
                         # ====== PRESET SINGLE MODEL (Filter/Rename Stems) ======
-                        import soundfile as sf
                         self.post_log(i18n.tr("status_loading"))
                         separator.load_model(model_filename=self.preset_config["model_1"])
                         self.post_log(i18n.tr("status_starting", file=os.path.basename(current_input_file)))
@@ -1060,16 +326,12 @@ class SeparationThread(threading.Thread):
                     elif preset_type == "ensemble":
 
                         # ====== PRESET ENSEMBLE (2-Pass + Local Mixing) ======
-                        import soundfile as sf
-                        import numpy as np
-                        from gui.audio_utils import blend_audio, stem_from_filename
-
                         algorithm = self.preset_config.get("algorithm", "avg_wave")
-                        temp_dir_1 = tempfile.mkdtemp(dir=self.output_dir, prefix="ens_1_")
-                        temp_dir_2 = tempfile.mkdtemp(dir=self.output_dir, prefix="ens_2_")
+                        temp_dir_1 = self._mkdtemp("ens_1_")
+                        temp_dir_2 = self._mkdtemp("ens_2_")
 
                         # Pass 1
-                        self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 1: {self.preset_config['model_1']})")
+                        self.post_log(i18n.tr("status_ensemble_start") + i18n.tr("log_pass", num=1, model=self.preset_config['model_1']))
                         separator.output_dir = temp_dir_1
                         separator.load_model(model_filename=self.preset_config["model_1"])
                         old_stderr = sys.stderr
@@ -1081,7 +343,7 @@ class SeparationThread(threading.Thread):
 
                         # Pass 2
                         self.post_progress(0)
-                        self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 2: {self.preset_config['model_2']})")
+                        self.post_log(i18n.tr("status_ensemble_start") + i18n.tr("log_pass", num=2, model=self.preset_config['model_2']))
                         separator.output_dir = temp_dir_2
                         separator.load_model(model_filename=self.preset_config["model_2"])
                         old_stderr = sys.stderr
@@ -1091,24 +353,48 @@ class SeparationThread(threading.Thread):
                         finally:
                             sys.stderr = old_stderr
 
-                        # Blending
-                        self.post_log(i18n.tr("status_ensemble_mixing") + f" [{algorithm}]")
+                        self.post_progress(0)
+                        self.post_log(i18n.tr("status_ensemble_mixing"))
+                        
                         final_outputs = []
+                        # Stems in both M1 and M2
                         for f1 in output_files_1:
                             stem1 = stem_from_filename(f1)
-                            match_2 = [f for f in output_files_2 if stem_from_filename(f) == stem1]
                             clean_ext = os.path.splitext(f1)[1]
-                            if match_2:
-                                d1, sr1 = sf.read(os.path.join(temp_dir_1, f1))
-                                d2, _ = sf.read(os.path.join(temp_dir_2, match_2[0]))
-                                min_len = min(len(d1), len(d2))
-                                mixed = blend_audio(d1[:min_len], d2[:min_len], algorithm)
-                                out_name = f"(Ensemble_{stem1.capitalize()}){clean_ext}"
+                            f2 = next((f for f in output_files_2 if stem_from_filename(f) == stem1), None)
+                            if f2:
+                                p1 = os.path.join(temp_dir_1, f1)
+                                p2 = os.path.join(temp_dir_2, f2)
+                                mixed, sr1 = blend_audio(p1, p2, algorithm)
+                                suffix = stem1.capitalize()
+                                if not self.use_subfolder:
+                                    out_name = f"{folder_name}_Ensemble_{suffix}{clean_ext}"
+                                else:
+                                    out_name = f"Ensemble_{suffix}{clean_ext}"
+                                
                                 sf.write(os.path.join(file_output_dir, out_name), mixed, sr1)
                                 final_outputs.append(out_name)
                             else:
-                                out_name = f"(Ensemble_{stem1.capitalize()}_M1){clean_ext}"
+                                suffix = f"{stem1.capitalize()}_M1"
+                                if not self.use_subfolder:
+                                    out_name = f"{folder_name}_Ensemble_{suffix}{clean_ext}"
+                                else:
+                                    out_name = f"Ensemble_{suffix}{clean_ext}"
+                                    
                                 shutil.copy(os.path.join(temp_dir_1, f1), os.path.join(file_output_dir, out_name))
+                                final_outputs.append(out_name)
+                        # Stems only in M2
+                        for f2 in output_files_2:
+                            stem2 = stem_from_filename(f2)
+                            if not any(stem_from_filename(f) == stem2 for f in output_files_1):
+                                clean_ext = os.path.splitext(f2)[1]
+                                suffix = f"{stem2.capitalize()}_M2"
+                                if not self.use_subfolder:
+                                    out_name = f"{folder_name}_Ensemble_{suffix}{clean_ext}"
+                                else:
+                                    out_name = f"Ensemble_{suffix}{clean_ext}"
+                                    
+                                shutil.copy(os.path.join(temp_dir_2, f2), os.path.join(file_output_dir, out_name))
                                 final_outputs.append(out_name)
 
                         shutil.rmtree(temp_dir_1, ignore_errors=True)
@@ -1117,253 +403,228 @@ class SeparationThread(threading.Thread):
                         self.post_log(i18n.tr("status_ensemble_done"))
 
                     else:
-                        # ====== CHAINED PRESET MULTI-PASS ======
-
-
-                        temp_dir_1 = tempfile.mkdtemp(dir=self.output_dir, prefix="chain_1_")
-                        temp_dir_2 = tempfile.mkdtemp(dir=self.output_dir, prefix="chain_2_")
+                        # ====== CHAINED PRESET MULTI-PASS (Supports N passes) ======
                         final_outputs = []
-                        from gui.audio_utils import stem_from_filename
-                    
-                        # Model 1
-                        self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 1: {self.preset_config['model_1']})")
-                        separator.output_dir = temp_dir_1
-                        separator.load_model(model_filename=self.preset_config['model_1'])
-                    
-                        old_stderr = sys.stderr
-                        sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
-                        try:
-                            output_files_1 = separator.separate(safe_input_file)
-                        finally:
-                            sys.stderr = old_stderr
 
-                        pass_file_path = None
-                        pass_stem = self.preset_config["pass_stem"].lower()
-                        rename_map_1 = self.preset_config.get("m1_rename_map", {})
-                        
-                        if rename_map_1:
-                            for f1 in output_files_1:
-                                stem1 = stem_from_filename(f1)
-                                clean_ext = os.path.splitext(f1)[1]
-                                stem_match = stems_are_equivalent(stem1, pass_stem)
-                                found_map, suffix = get_rename_suffix(stem1, rename_map_1)
-                                
-                                if stem_match:
-                                    pass_file_path = os.path.join(temp_dir_1, f1)
-                                    
-                                if found_map and suffix is None:
-                                    continue
-                                    
-                                if suffix is not None:
-                                    suffix = suffix.lstrip('_')
-                                    if not self.use_subfolder:
-                                        out_name = f"{folder_name}_{suffix}{clean_ext}"
-                                    else:
-                                        out_name = f"{suffix}{clean_ext}"
-                                    final_path = os.path.join(file_output_dir, out_name)
-                                    shutil.copy(os.path.join(temp_dir_1, f1), final_path)
-                                    final_outputs.append(out_name)
-                        else:
-                            for f1 in output_files_1:
-                                stem1 = stem_from_filename(f1)
-                                clean_ext = os.path.splitext(f1)[1]
-                                stem_match = stems_are_equivalent(stem1, pass_stem)
+                        # Collect all models in order from preset_config or manual models
+                        chain_steps = []
+                        step_idx = 1
+                        while True:
+                            model_key = f"model_{step_idx}"
+                            m_name = self.preset_config.get(model_key) if self.preset_config else None
+                            if not m_name:
+                                if step_idx == 1:
+                                    m_name = self.model_name
+                                elif step_idx == 2:
+                                    m_name = self.model_name_2
+                                elif step_idx == 3:
+                                    m_name = self.model_name_3
+                                elif step_idx == 4:
+                                    m_name = self.model_name_4
+                                elif step_idx == 5:
+                                    m_name = getattr(self, "model_name_5", None)
                             
-                                if stem_match:
-                                    pass_file_path = os.path.join(temp_dir_1, f1)
-                                    if "m1_keep_pass_stem_name" in self.preset_config:
-                                        suffix = self.preset_config["m1_keep_pass_stem_name"].lstrip('_')
-                                        if not self.use_subfolder:
-                                            out_name = f"{folder_name}_{suffix}{clean_ext}"
-                                        else:
-                                            out_name = f"{suffix}{clean_ext}"
-                                        final_path = os.path.join(file_output_dir, out_name)
-                                        shutil.copy(os.path.join(temp_dir_1, f1), final_path)
-                                        final_outputs.append(out_name)
-                                else:
-                                    suffix = self.preset_config.get("m1_keep_name", "_Instrumental").lstrip('_')
-                                    if not self.use_subfolder:
-                                        out_name = f"{folder_name}_{suffix}{clean_ext}"
-                                    else:
-                                        out_name = f"{suffix}{clean_ext}"
-                                    final_path = os.path.join(file_output_dir, out_name)
-                                    shutil.copy(os.path.join(temp_dir_1, f1), final_path)
-                                    final_outputs.append(out_name)
-                                    
-                        if not pass_file_path and output_files_1:
-                            if len(output_files_1) == 2:
-                                sec_group = {"other", "instrumental", "noise", "reverb", "no_dry", "nodry", "bleed", "extra"}
-                                if pass_stem in sec_group:
-                                    pass_file_path = os.path.join(temp_dir_1, output_files_1[1])
-                                else:
-                                    pass_file_path = os.path.join(temp_dir_1, output_files_1[0])
-                                self.post_log(f"Selected fallback stem file '{os.path.basename(pass_file_path)}' for '{pass_stem}'.")
-                            elif len(output_files_1) > 0:
-                                pass_file_path = os.path.join(temp_dir_1, output_files_1[0])
-                                self.post_log(f"Selected fallback stem file '{os.path.basename(pass_file_path)}' for '{pass_stem}'.")
-                            
-                        if pass_file_path:
-                            # Model 2
+                            if not m_name:
+                                break
+
+                            pass_key = "pass_stem" if step_idx == 1 else f"pass_stem_{step_idx}"
+                            p_stem = self.preset_config.get(pass_key, "").lower() if self.preset_config else ""
+                            rename_map = self.preset_config.get(f"m{step_idx}_rename_map", {}) if self.preset_config else {}
+                            keep_name = self.preset_config.get(f"m{step_idx}_keep_name") if self.preset_config else None
+                            keep_pass_stem = self.preset_config.get(f"m{step_idx}_keep_pass_stem_name") if self.preset_config else None
+                            gain_db = float(self.preset_config.get(f"m{step_idx}_gain_db", 0.0)) if self.preset_config else 0.0
+
+                            chain_steps.append({
+                                "step_num": step_idx,
+                                "model": m_name,
+                                "pass_stem": p_stem,
+                                "rename_map": rename_map,
+                                "keep_name": keep_name,
+                                "keep_pass_stem_name": keep_pass_stem,
+                                "gain_db": gain_db
+                            })
+                            step_idx += 1
+
+                        current_pass_file = safe_input_file
+                        for i, step in enumerate(chain_steps):
+                            step_num = step["step_num"]
+                            model_file = step["model"]
+                            pass_stem = step["pass_stem"]
+                            rename_map = step["rename_map"]
+                            keep_name = step["keep_name"]
+                            keep_pass_stem_name = step["keep_pass_stem_name"]
+                            gain_db = step.get("gain_db", 0.0)
+                            is_last_step = (i == len(chain_steps) - 1)
+
+                            def _copy_with_gain(src, dst, g):
+                                if g != 0.0:
+                                    try:
+                                        d_arr, d_sr = sf.read(src, dtype='float32')
+                                        d_arr = d_arr * (10.0 ** (g / 20.0))
+                                        sf.write(dst, d_arr, d_sr)
+                                        return
+                                    except Exception:
+                                        pass
+                                shutil.copy(src, dst)
+
+                            temp_dir = self._mkdtemp(f"chain_{step_num}_")
                             self.post_progress(0)
-                            self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 2: {self.preset_config['model_2']})")
-                            separator.output_dir = temp_dir_2
-                            separator.load_model(model_filename=self.preset_config['model_2'])
-                        
+                            self.post_log(i18n.tr("status_ensemble_start") + i18n.tr("log_pass", num=step_num, model=model_file))
+                            separator.output_dir = temp_dir
+                            separator.load_model(model_filename=model_file)
+
                             old_stderr = sys.stderr
                             sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
                             try:
-                                output_files_2 = separator.separate(pass_file_path)
+                                step_output_files = separator.separate(current_pass_file)
                             finally:
                                 sys.stderr = old_stderr
 
-                            pass_file_path_2 = None
-                            pass_stem_2 = self.preset_config.get("pass_stem_2", "").lower()
-                            rename_map_2 = self.preset_config.get("m2_rename_map", {})
-                        
-                            for f2 in output_files_2:
-                                stem2 = stem_from_filename(f2)
-                                clean_ext = os.path.splitext(f2)[1]
-                            
-                                stem_match_2 = (pass_stem_2 != "" and stems_are_equivalent(stem2, pass_stem_2))
-                                found_map, suffix = get_rename_suffix(stem2, rename_map_2)
-                                
-                                if stem_match_2:
-                                    pass_file_path_2 = os.path.join(temp_dir_2, f2)
-                                    
-                                if found_map and suffix is None:
-                                    continue
-                                    
-                                if suffix is not None:
-                                    suffix = suffix.lstrip('_')
-                                    if not self.use_subfolder:
-                                        out_name = f"{folder_name}_{suffix}{clean_ext}"
-                                    else:
-                                        out_name = f"{suffix}{clean_ext}"
+                            next_pass_file = None
+                            for f in step_output_files:
+                                stem = stem_from_filename(f)
+                                clean_ext = os.path.splitext(f)[1]
+                                stem_match = (pass_stem != "" and stems_are_equivalent(stem, pass_stem))
+                                found_map, suffix = get_rename_suffix(stem, rename_map) if rename_map else (False, None)
+
+                                if stem_match and not is_last_step:
+                                    next_pass_file = os.path.join(temp_dir, f)
+
+                                if stem_match and keep_pass_stem_name:
+                                    suffix_clean = keep_pass_stem_name.lstrip('_')
+                                    out_name = f"{folder_name}_{suffix_clean}{clean_ext}" if not self.use_subfolder else f"{suffix_clean}{clean_ext}"
                                     final_path = os.path.join(file_output_dir, out_name)
-                                    
-                                    if stem_match_2:
-                                        if "m2_keep_pass_stem_name" in self.preset_config or found_map:
-                                            shutil.copy(os.path.join(temp_dir_2, f2), final_path)
-                                            final_outputs.append(out_name)
-                                    else:
-                                        shutil.copy(os.path.join(temp_dir_2, f2), final_path)
+                                    _copy_with_gain(os.path.join(temp_dir, f), final_path, gain_db)
+                                    final_outputs.append(out_name)
+                                    continue
+
+                                if rename_map:
+                                    if found_map and suffix is None:
+                                        # Explicitly discarded stem
+                                        continue
+                                    if suffix is not None:
+                                        suffix_clean = suffix.lstrip('_')
+                                        out_name = f"{folder_name}_{suffix_clean}{clean_ext}" if not self.use_subfolder else f"{suffix_clean}{clean_ext}"
+                                        final_path = os.path.join(file_output_dir, out_name)
+                                        _copy_with_gain(os.path.join(temp_dir, f), final_path, gain_db)
+                                        final_outputs.append(out_name)
+                                else:
+                                    if not stem_match or is_last_step:
+                                        def_keep = keep_name if keep_name else f"_{stem.capitalize()}"
+                                        suffix_clean = def_keep.lstrip('_')
+                                        out_name = f"{folder_name}_{suffix_clean}{clean_ext}" if not self.use_subfolder else f"{suffix_clean}{clean_ext}"
+                                        final_path = os.path.join(file_output_dir, out_name)
+                                        _copy_with_gain(os.path.join(temp_dir, f), final_path, gain_db)
                                         final_outputs.append(out_name)
 
-                            if pass_stem_2 and not pass_file_path_2 and output_files_2:
-                                if len(output_files_2) == 2:
-                                    sec_group = {"other", "instrumental", "noise", "reverb", "no_dry", "nodry", "bleed", "extra"}
-                                    if pass_stem_2 in sec_group:
-                                        pass_file_path_2 = os.path.join(temp_dir_2, output_files_2[1])
+                            # Handle fallback if pass stem was not matched exactly
+                            if pass_stem and not next_pass_file and not is_last_step and step_output_files:
+                                sec_group = {"other", "instrumental", "noise", "reverb", "no_dry", "nodry", "bleed", "extra"}
+                                if len(step_output_files) == 2:
+                                    if pass_stem in sec_group:
+                                        next_pass_file = os.path.join(temp_dir, step_output_files[1])
                                     else:
-                                        pass_file_path_2 = os.path.join(temp_dir_2, output_files_2[0])
-                                    self.post_log(f"Selected fallback stem file '{os.path.basename(pass_file_path_2)}' for '{pass_stem_2}'.")
-                                elif len(output_files_2) > 0:
-                                    pass_file_path_2 = os.path.join(temp_dir_2, output_files_2[0])
-                                    self.post_log(f"Selected fallback stem file '{os.path.basename(pass_file_path_2)}' for '{pass_stem_2}'.")
+                                        next_pass_file = os.path.join(temp_dir, step_output_files[0])
+                                else:
+                                    next_pass_file = os.path.join(temp_dir, step_output_files[0])
+                                self.post_log(i18n.tr("log_fallback_stem", file=os.path.basename(next_pass_file), stem=pass_stem))
 
-                            if pass_file_path_2 and self.model_name_3:
-                                # Model 3
-                                temp_dir_3 = tempfile.mkdtemp(dir=self.output_dir, prefix="chain_3_")
-                                self.post_progress(0)
-                                self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 3: {self.model_name_3})")
-                                separator.output_dir = temp_dir_3
-                                separator.load_model(model_filename=self.model_name_3)
-                            
-                                old_stderr = sys.stderr
-                                sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
+                            if not is_last_step:
+                                if not next_pass_file:
+                                    self.post_log(i18n.tr("log_missing_pass_stem", stem=pass_stem))
+                                    break
+                                # Save next_pass_file to a safe persistent temp path for the next step before temp_dir is removed
+                                persistent_next_pass = os.path.join(tempfile.gettempdir(), f"chain_pass_{uuid.uuid4().hex[:8]}.wav")
+                                shutil.copy2(next_pass_file, persistent_next_pass)
+                                current_pass_file = persistent_next_pass
+
+                            shutil.rmtree(temp_dir, ignore_errors=True)
+
+                        # Post-mix rules (e.g. summing stems or subtracting vocals from input mix)
+                        post_mix_rules = self.preset_config.get("post_mix", []) if self.preset_config else []
+                        for pm_rule in post_mix_rules:
+                            out_suffix = pm_rule.get("output", "")
+                            if not out_suffix:
+                                continue
+
+                            if pm_rule.get("subtract_from_input"):
+                                stems_to_sub = pm_rule.get("subtract_stems", [])
                                 try:
-                                    output_files_3 = separator.separate(pass_file_path_2)
-                                finally:
-                                    sys.stderr = old_stderr
-                                
-                                pass_file_path_3 = None
-                                pass_stem_3 = self.preset_config.get("pass_stem_3", "").lower()
-                                rename_map_3 = self.preset_config.get("m3_rename_map", {})
-                                
-                                for f3 in output_files_3:
-                                    stem3 = stem_from_filename(f3)
-                                    clean_ext = os.path.splitext(f3)[1]
-                                    
-                                    stem_match_3 = (pass_stem_3 != "" and stems_are_equivalent(stem3, pass_stem_3))
-                                    found_map, suffix = get_rename_suffix(stem3, rename_map_3)
-                                    
-                                    if stem_match_3:
-                                        pass_file_path_3 = os.path.join(temp_dir_3, f3)
-                                        
-                                    if found_map and suffix is None:
-                                        continue
-                                        
-                                    if suffix is not None:
-                                        suffix = suffix.lstrip('_')
-                                        if not self.use_subfolder:
-                                            out_name = f"{folder_name}_{suffix}{clean_ext}"
-                                        else:
-                                            out_name = f"{suffix}{clean_ext}"
-                                        final_path = os.path.join(file_output_dir, out_name)
-                                        
-                                        if stem_match_3:
-                                            if "m3_keep_pass_stem_name" in self.preset_config or found_map:
-                                                shutil.copy(os.path.join(temp_dir_3, f3), final_path)
-                                                final_outputs.append(out_name)
-                                        else:
-                                            shutil.copy(os.path.join(temp_dir_3, f3), final_path)
-                                            final_outputs.append(out_name)
+                                    sub_data, in_sr = sf.read(safe_input_file, dtype='float32')
+                                    for stem_key in stems_to_sub:
+                                        clean_key = stem_key.lstrip('_')
+                                        match_file = next((f for f in final_outputs if os.path.splitext(f)[0] in (f"{folder_name}_{clean_key}", clean_key)), None)
+                                        if match_file:
+                                            full_p = os.path.join(file_output_dir, match_file)
+                                            data, _ = sf.read(full_p, dtype='float32')
+                                            if sub_data.ndim == 2 and data.ndim == 1:
+                                                data = np.tile(data[:, None], (1, sub_data.shape[1]))
+                                            elif sub_data.ndim == 1 and data.ndim == 2:
+                                                sub_data = np.tile(sub_data[:, None], (1, data.shape[1]))
+                                            min_len = min(len(sub_data), len(data))
+                                            sub_data[:min_len] -= data[:min_len]
 
-                                if pass_stem_3 and not pass_file_path_3 and output_files_3:
-                                    if len(output_files_3) == 2:
-                                        sec_group = {"other", "instrumental", "noise", "reverb", "no_dry", "nodry", "bleed", "extra"}
-                                        if pass_stem_3 in sec_group:
-                                            pass_file_path_3 = os.path.join(temp_dir_3, output_files_3[1])
-                                        else:
-                                            pass_file_path_3 = os.path.join(temp_dir_3, output_files_3[0])
-                                        self.post_log(f"Selected fallback stem file '{os.path.basename(pass_file_path_3)}' for '{pass_stem_3}'.")
-                                    elif len(output_files_3) > 0:
-                                        pass_file_path_3 = os.path.join(temp_dir_3, output_files_3[0])
-                                        self.post_log(f"Selected fallback stem file '{os.path.basename(pass_file_path_3)}' for '{pass_stem_3}'.")
-                                
-                                if pass_file_path_3 and self.model_name_4:
-                                    # Model 4
-                                    temp_dir_4 = tempfile.mkdtemp(dir=self.output_dir, prefix="chain_4_")
-                                    self.post_progress(0)
-                                    self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 4: {self.model_name_4})")
-                                    separator.output_dir = temp_dir_4
-                                    separator.load_model(model_filename=self.model_name_4)
-                                    
-                                    old_stderr = sys.stderr
-                                    sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
-                                    try:
-                                        output_files_4 = separator.separate(pass_file_path_3)
-                                    finally:
-                                        sys.stderr = old_stderr
-                                        
-                                    rename_map_4 = self.preset_config.get("m4_rename_map", {})
-                                    for f4 in output_files_4:
-                                        stem4 = stem_from_filename(f4)
-                                        clean_ext = os.path.splitext(f4)[1]
-                                        
-                                        found_map, suffix = get_rename_suffix(stem4, rename_map_4)
-                                        if found_map and suffix is None:
-                                            continue
-                                            
-                                        if suffix is not None:
-                                            suffix = suffix.lstrip('_')
-                                            if not self.use_subfolder:
-                                                out_name = f"{folder_name}_{suffix}{clean_ext}"
+                                    out_sfx_clean = out_suffix.lstrip('_')
+                                    out_mix_name = f"{folder_name}_{out_sfx_clean}.wav" if not self.use_subfolder else f"{out_sfx_clean}.wav"
+                                    out_mix_path = os.path.join(file_output_dir, out_mix_name)
+                                    sf.write(out_mix_path, sub_data, in_sr)
+                                    if out_mix_name not in final_outputs:
+                                        final_outputs.append(out_mix_name)
+                                except Exception as sub_err:
+                                    self.post_log(f"Error computing subtraction instrumental: {sub_err}")
+
+                            else:
+                                stems_to_mix = pm_rule.get("stems", [])
+                                delete_sources = pm_rule.get("delete_sources", [])
+                                if not stems_to_mix:
+                                    continue
+
+                                mixed_audio = None
+                                mix_sr = None
+                                found_paths = []
+                                for stem_key in stems_to_mix:
+                                    clean_key = stem_key.lstrip('_')
+                                    match_file = next((f for f in final_outputs if os.path.splitext(f)[0] in (f"{folder_name}_{clean_key}", clean_key)), None)
+                                    if match_file:
+                                        full_p = os.path.join(file_output_dir, match_file)
+                                        found_paths.append((stem_key, match_file, full_p))
+                                        try:
+                                            data, sr = sf.read(full_p, dtype='float32')
+                                            if mix_sr is None:
+                                                mix_sr = sr
+                                            if mixed_audio is None:
+                                                mixed_audio = data
                                             else:
-                                                out_name = f"{suffix}{clean_ext}"
-                                            final_path = os.path.join(file_output_dir, out_name)
-                                            shutil.copy(os.path.join(temp_dir_4, f4), final_path)
-                                            final_outputs.append(out_name)
-                                        
-                                    shutil.rmtree(temp_dir_4, ignore_errors=True)
-                                    
-                                shutil.rmtree(temp_dir_3, ignore_errors=True)
-                        else:
-                            self.post_log(f"Warning: Could not find '{pass_stem}' stem from Pass 1 to feed into Pass 2.")
-                    
-                        shutil.rmtree(temp_dir_1, ignore_errors=True)
-                        shutil.rmtree(temp_dir_2, ignore_errors=True)
-                    
+                                                if mixed_audio.ndim == 1 and data.ndim == 2:
+                                                    mixed_audio = np.tile(mixed_audio[:, None], (1, data.shape[1]))
+                                                elif mixed_audio.ndim == 2 and data.ndim == 1:
+                                                    data = np.tile(data[:, None], (1, mixed_audio.shape[1]))
+                                                min_len = min(len(mixed_audio), len(data))
+                                                mixed_audio = mixed_audio[:min_len] + data[:min_len]
+                                        except Exception as mix_err:
+                                            self.post_log(f"Error reading {match_file} for post-mixing: {mix_err}")
+
+                                if mixed_audio is not None and mix_sr is not None:
+                                    out_sfx_clean = out_suffix.lstrip('_')
+                                    out_mix_name = f"{folder_name}_{out_sfx_clean}.wav" if not self.use_subfolder else f"{out_sfx_clean}.wav"
+                                    out_mix_path = os.path.join(file_output_dir, out_mix_name)
+                                    sf.write(out_mix_path, mixed_audio, mix_sr)
+                                    if out_mix_name not in final_outputs:
+                                        final_outputs.append(out_mix_name)
+
+                                    # Cleanup deleted sources if requested
+                                    for del_key in delete_sources:
+                                        del_clean = del_key.lstrip('_')
+                                        to_del = [item for item in found_paths if item[0] == del_key or os.path.splitext(item[1])[0] in (f"{folder_name}_{del_clean}", del_clean)]
+                                        for _, df_name, df_path in to_del:
+                                            if os.path.exists(df_path) and df_path != out_mix_path:
+                                                try:
+                                                    os.remove(df_path)
+                                                except Exception:
+                                                    pass
+                                            if df_name in final_outputs:
+                                                final_outputs.remove(df_name)
+
                         output_files = final_outputs
                         self.post_log(i18n.tr("status_ensemble_done"))
 
@@ -1401,18 +662,13 @@ class SeparationThread(threading.Thread):
                     output_files = renamed_output_files
                 else:
                     # ====== ENSEMBLE DUAL MODEL PASS (2-Pass + Local Mixing) ======
-                    import soundfile as sf
-                    import numpy as np
-
                     algorithm = self.ensemble_algorithm
-                    temp_dir_1 = tempfile.mkdtemp(dir=self.output_dir, prefix="ens_1_")
-                    temp_dir_2 = tempfile.mkdtemp(dir=self.output_dir, prefix="ens_2_")
+                    temp_dir_1 = self._mkdtemp("ens_1_")
+                    temp_dir_2 = self._mkdtemp("ens_2_")
                     base_input_name = os.path.splitext(os.path.basename(current_input_file))[0]
 
-                    from gui.audio_utils import stem_from_filename, blend_audio
-
                     # Pass 1
-                    self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 1: {self.model_name})")
+                    self.post_log(i18n.tr("status_ensemble_start") + i18n.tr("log_pass", num=1, model=self.model_name))
                     separator.output_dir = temp_dir_1
                     separator.load_model(model_filename=self.model_name)
                     old_stderr = sys.stderr
@@ -1424,7 +680,7 @@ class SeparationThread(threading.Thread):
 
                     # Pass 2
                     self.post_progress(0)
-                    self.post_log(i18n.tr("status_ensemble_start") + f" (Pass 2: {self.model_name_2})")
+                    self.post_log(i18n.tr("status_ensemble_start") + i18n.tr("log_pass", num=2, model=self.model_name_2))
                     separator.output_dir = temp_dir_2
                     separator.load_model(model_filename=self.model_name_2)
                     old_stderr = sys.stderr
@@ -1486,7 +742,61 @@ class SeparationThread(threading.Thread):
                     output_files = final_outputs
                     self.post_log(i18n.tr("status_ensemble_done"))
             
-                if self.output_format != "WAV":
+                if safe_input_file and os.path.exists(safe_input_file):
+                    try:
+                        os.remove(safe_input_file)
+                    except Exception:
+                        pass
+
+                # --- Silent stem detection and optional deletion (executed BEFORE format conversion) ---
+                if self.delete_silent_stems and output_files:
+                    surviving = []
+                    for fname in output_files:
+                        fpath = os.path.join(file_output_dir, fname) if not os.path.isabs(fname) else fname
+                        if not os.path.exists(fpath):
+                            surviving.append(fname)
+                            continue
+
+                        peak_db, rms_db = get_audio_volume_stats(fpath)
+                        # A stem is silent if its peak is below the threshold OR if its average RMS energy is deeply in the noise floor
+                        # (e.g. inactive stem with a single 1-sample transient artifact)
+                        is_silent = (peak_db < self.silent_stem_threshold) or (rms_db < (self.silent_stem_threshold - 10.0))
+
+                        display_name = os.path.basename(fname)
+                        if is_silent:
+                            try:
+                                os.remove(fpath)
+                                self.post_log(i18n.tr("status_silent_stem_deleted", file=display_name, peak=peak_db, rms=rms_db, threshold=self.silent_stem_threshold))
+                            except Exception as del_err:
+                                self.post_log(f"Error removing silent file {display_name}: {del_err}")
+                                surviving.append(fname)
+                        else:
+                            self.post_log(i18n.tr("status_silent_stem_kept", file=display_name, peak=peak_db, rms=rms_db, threshold=self.silent_stem_threshold))
+                            surviving.append(fname)
+                    output_files = surviving
+
+                # --- Format conversion (runs only on active/surviving stems) ---
+                if self.output_format == "WAV":
+                    bd_str = str(self.bit_depth).lower()
+                    if "16" in bd_str or "24" in bd_str:
+                        codec = "pcm_s16le" if "16" in bd_str else "pcm_s24le"
+                        target_bd = "16-bit" if "16" in bd_str else "24-bit"
+                        for file in output_files:
+                            try:
+                                fpath = os.path.join(file_output_dir, file)
+                                tmp_path = os.path.join(file_output_dir, f"tmp_{file}")
+                                self.post_log(i18n.tr("status_converting", file=file, format=f"WAV ({target_bd})"))
+                                cmd = ["ffmpeg", "-y", "-i", fpath, "-c:a", codec, tmp_path]
+                                result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                if result.returncode == 0 and os.path.exists(tmp_path):
+                                    os.replace(tmp_path, fpath)
+                                else:
+                                    if os.path.exists(tmp_path):
+                                        os.remove(tmp_path)
+                            except Exception as ex:
+                                self.post_log(i18n.tr("log_convert_error", file=file, error=ex))
+
+                elif self.output_format in ("FLAC", "MP3"):
                     new_files = []
                     for file in output_files:
                         try:
@@ -1496,12 +806,18 @@ class SeparationThread(threading.Thread):
                             new_filename = f"{base}{new_ext}"
                             new_path = os.path.join(file_output_dir, new_filename)
                         
-                            self.post_log(i18n.tr("status_converting", file=file, format=self.output_format))
-                        
                             if self.output_format == "FLAC":
-                                cmd = ["ffmpeg", "-y", "-i", old_path, "-c:a", "flac", "-sample_fmt", "s16", new_path]
-                            else:
-                                cmd = ["ffmpeg", "-y", "-i", old_path, "-c:a", "libmp3lame", "-b:a", "320k", new_path]
+                                bd_str = str(self.bit_depth).lower()
+                                sample_fmt = "s16" if "16" in bd_str else "s32"
+                                target_bd = "16-bit" if "16" in bd_str else "24-bit"
+                                self.post_log(i18n.tr("status_converting", file=file, format=f"FLAC ({target_bd})"))
+                                cmd = ["ffmpeg", "-y", "-i", old_path, "-c:a", "flac", "-sample_fmt", sample_fmt, new_path]
+                            else: # MP3
+                                import re
+                                mp3_b = re.sub(r'[^0-9]', '', str(self.bitrate))
+                                b_arg = f"{mp3_b}k" if mp3_b else "320k"
+                                self.post_log(i18n.tr("status_converting", file=file, format=f"MP3 ({b_arg})"))
+                                cmd = ["ffmpeg", "-y", "-i", old_path, "-c:a", "libmp3lame", "-b:a", b_arg, new_path]
                             
                             result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                         
@@ -1510,53 +826,28 @@ class SeparationThread(threading.Thread):
                                     os.remove(old_path)
                                 new_files.append(new_filename)
                             else:
-                                self.post_log(f"FFmpeg conversion failed for {file}")
+                                self.post_log(i18n.tr("log_ffmpeg_failed", file=file))
                                 new_files.append(file)
                         except Exception as ex:
-                            self.post_log(f"Error converting {file}: {ex}")
+                            self.post_log(i18n.tr("log_convert_error", file=file, error=ex))
                             new_files.append(file)
                     output_files = new_files
-                
-                if safe_input_file and os.path.exists(safe_input_file):
-                    try:
-                        os.remove(safe_input_file)
-                    except Exception:
-                        pass
 
-                # --- Silent stem detection and optional deletion ---
-                if self.delete_silent_stems and output_files:
-                    surviving = []
-                    for fname in output_files:
-                        fpath = os.path.join(file_output_dir, fname)
-                        if not os.path.exists(fpath):
-                            surviving.append(fname)
-                            continue
-                        try:
-                            vol_res = subprocess.run(
-                                ['ffmpeg', '-y', '-i', fpath, '-af', 'volumedetect', '-f', 'null',
-                                 os.devnull if os.name != 'nt' else 'NUL'],
-                                capture_output=True, text=True
-                            )
-                            peak_m = re.search(r'max_volume:\s*([-\d.]+)\s*dB', vol_res.stderr)
-                            if peak_m and float(peak_m.group(1)) < -50.0:
-                                os.remove(fpath)
-                                self.post_log(i18n.tr("status_silent_stem_deleted", file=fname))
-                            else:
-                                surviving.append(fname)
-                                self.all_output_files.append(fpath)
-                        except Exception:
-                            surviving.append(fname)
-                            self.all_output_files.append(fpath)
-                    output_files = surviving
-                else:
-                    for fname in output_files:
-                        fpath = os.path.join(file_output_dir, fname)
-                        if os.path.exists(fpath):
-                            self.all_output_files.append(fpath)
+                # Accumulate final output paths
+                for fname in output_files:
+                    fpath = os.path.join(file_output_dir, fname) if not os.path.isabs(fname) else fname
+                    if os.path.exists(fpath):
+                        self.all_output_files.append(fpath)
 
             self.post_progress(100)
             self.post_log(i18n.tr("status_complete", files=output_files))
-            wx.PostEvent(self.parent, DoneEvent(True, i18n.tr("msg_success"), output_files=self.all_output_files))
+            if self.on_done:
+                try:
+                    self.on_done(True, i18n.tr("msg_success"), self.all_output_files)
+                except Exception:
+                    pass
+            if self.parent:
+                wx.PostEvent(self.parent, DoneEvent(True, i18n.tr("msg_success"), output_files=self.all_output_files))
 
         except Exception as e:
             import traceback
@@ -1578,10 +869,22 @@ class SeparationThread(threading.Thread):
                     f"Technical detail: {error_msg}"
                 )
                 self.post_log(friendly)
-                wx.PostEvent(self.parent, DoneEvent(False, friendly))
+                if self.on_done:
+                    try:
+                        self.on_done(False, friendly, [])
+                    except Exception:
+                        pass
+                if self.parent:
+                    wx.PostEvent(self.parent, DoneEvent(False, friendly))
             else:
                 self.post_log(i18n.tr("status_error", error=error_msg))
-                wx.PostEvent(self.parent, DoneEvent(False, error_msg))
+                if self.on_done:
+                    try:
+                        self.on_done(False, error_msg, [])
+                    except Exception:
+                        pass
+                if self.parent:
+                    wx.PostEvent(self.parent, DoneEvent(False, error_msg))
             
         finally:
             # Always cleanly restore the patched variables for subsequent GPU runs
@@ -1607,21 +910,48 @@ class SeparationThread(threading.Thread):
                 except ImportError:
                     pass
             
-            # Restore original torch loading functions
+            # Restore the library patches applied during this run
+            if 'patcher' in locals():
+                try:
+                    patcher.restore()
+                except Exception:
+                    pass
+
+            # Remove temp dirs and the converted input WAV left behind by an
+            # error path (normally cleaned per-file, but failures skip that code).
+            for path in self._temp_dirs:
+                shutil.rmtree(path, ignore_errors=True)
+            self._temp_dirs = []
             try:
-                import torch, torch.serialization
-                if '_original_torch_load' in locals():
-                    torch.load = _original_torch_load
-                if '_original_serialization_load' in locals():
-                    torch.serialization.load = _original_serialization_load
-            except ImportError:
+                if 'safe_input_file' in locals() and os.path.exists(safe_input_file):
+                    os.remove(safe_input_file)
+            except Exception:
                 pass
 
+    def _mkdtemp(self, prefix):
+        # Tracked so run()'s finally can remove leftovers when separation fails
+        # mid-way (e.g. OOM), instead of leaving dirs in the output folder.
+        path = tempfile.mkdtemp(dir=self.output_dir, prefix=prefix)
+        self._temp_dirs.append(path)
+        return path
+
     def post_progress(self, value, maximum=100):
-        wx.PostEvent(self.parent, ProgressEvent(value, maximum))
+        if self.on_progress:
+            try:
+                self.on_progress(value, maximum)
+            except Exception:
+                pass
+        if self.parent:
+            wx.PostEvent(self.parent, ProgressEvent(value, maximum))
 
     def post_log(self, message):
-        wx.PostEvent(self.parent, LogEvent(message))
+        if self.on_log:
+            try:
+                self.on_log(message)
+            except Exception:
+                pass
+        if self.parent:
+            wx.PostEvent(self.parent, LogEvent(message))
 
     def stop(self):
         self._stop_event.set()

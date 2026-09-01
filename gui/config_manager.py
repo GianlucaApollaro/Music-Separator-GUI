@@ -30,17 +30,38 @@ class ConfigManager:
                 logger.error(f"Failed to load config: {e}")
 
     def save(self):
+        """Atomically persist the config.
+
+        Writing in place truncates the file first: a crash or a full disk halfway
+        through leaves a corrupted config. We write a temp file next to the target
+        and swap it in with os.replace(), which is atomic on Windows and POSIX.
+        """
+        tmp_file = f"{self.config_file}.tmp"
         try:
-            with open(self.config_file, 'w', encoding='utf-8') as f:
+            os.makedirs(os.path.dirname(self.config_file), exist_ok=True)
+            with open(tmp_file, 'w', encoding='utf-8') as f:
                 json.dump(self.config, f, indent=4)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_file, self.config_file)
         except Exception as e:
             logger.error(f"Failed to save config: {e}")
+            try:
+                if os.path.exists(tmp_file):
+                    os.remove(tmp_file)
+            except OSError:
+                pass
 
     def get(self, key, default=None):
         return self.config.get(key, default)
 
     def set(self, key, value):
         self.config[key] = value
+        self.save()
+
+    def set_many(self, values: dict):
+        """Set several keys with a single write (set() saves on every call)."""
+        self.config.update(values)
         self.save()
 
 # Global instance

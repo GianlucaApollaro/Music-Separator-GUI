@@ -1,6 +1,6 @@
 ===============================================================================
                        MUSIC SEPARATOR - MANUAL DE USUARIO                       
-                       MANUAL EN ESPAÑOL (ES) - v1.6
+                       MANUAL EN ESPAÑOL (ES) - v1.7
 ===============================================================================
 
 Bienvenido a Music separator, una potente herramienta de separacion de audio 
@@ -24,24 +24,28 @@ WINDOWS:
 
 macOS (Apple Silicon M1/M2/M3/M4):
 - Descarga la versión de Mac (.zip) y extrae el archivo.
-- Mueve la carpeta resultante a /Applications.
+- Mueve la carpeta resultante a /Applications (ej. /Applications/Music Separator).
 - Haz clic derecho y selecciona 'Abrir' en 'Music separator.app'.
 - NOTA: FFmpeg está incluido. Si tienes problemas de permisos, consulta el 
   README para instrucciones del comando 'xattr'.
 
-2. NOVEDADES en la v1.6
+2. NOVEDADES en la v1.7
 -------------------------------------------------------------------------------
-- Preajustes Personalizables por el Usuario: Ahora puedes crear tus propios
-  preajustes haciendo clic en el botón "Crear preajuste" junto al selector de
-  preajustes. Soporta preajustes de modelo único o cadenas multipaso,
-  renombramiento de salida y mezcla de pistas restantes. Los preajustes se
-  guardan localmente en la carpeta del programa para una portabilidad total.
-- Agrupación de Modelos Descargados: Los modelos descargados localmente se
-  agrupan automáticamente en una categoría dedicada ("Modelos Descargados (Offline)")
-  en la parte superior del selector para un acceso rápido sin conexión.
-- Accesibilidad macOS VoiceOver: Se rediseñó el selector de modelos en macOS
-  para utilizar controles de lista nativos, lo que lo hace completamente accesible
-  para lectores de pantalla y VoiceOver.
+- Interfaz de Línea de Comandos (CLI / Headless): Ahora puedes utilizar Music Separator
+  directamente desde el terminal o consola de comandos, ideal para automatizaciones,
+  scripts y DAWs sin necesidad de abrir la interfaz gráfica.
+- Selección de Profundidad de Bits y Bitrate: Soporte completo para exportaciones
+  en 16-bit, 24-bit y 32-bit Float para WAV, 16-bit y 24-bit para FLAC, y tasa de bits
+  personalizada (320k, 256k, 192k, 128k) para MP3 mediante un selector dinámico accesible.
+- Refactorización de Parches de Runtime: Motor de parches completamente modular,
+  evitando fugas de memoria y acumulación de wrappers entre ejecuciones consecutivas.
+- Mayor Eficiencia y Robustez: Escrituras atómicas de configuración, caché inteligente
+  del catálogo de modelos y verificación estricta de descargas.
+
+NOVEDADES en la v1.6:
+- Preajustes Personalizables por el Usuario: Creación de cadenas multipaso.
+- Agrupación de Modelos Descargados (Offline).
+- Accesibilidad VoiceOver en macOS.
 
 NOVEDADES en la v1.5:
 - Activar Vista Previa: Procesa un fragmento de 30 segundos (primeros o últimos)
@@ -57,7 +61,10 @@ NOVEDADES en la v1.5:
    - En Windows/Linux, se muestran en un árbol categorizado con barra de búsqueda.
    - En macOS, se listan en una ListBox nativa y accesible.
    - Los modelos descargados aparecen al principio bajo "Modelos Descargados (Offline)".
-4. Selecciona el formato de salida (WAV, FLAC o MP3 a 320kbps).
+4. Selecciona el formato de salida (WAV, FLAC o MP3) y la calidad deseada:
+   - Para WAV: 16-bit, 24-bit o 32-bit Float (calidad de estudio).
+   - Para FLAC: 16-bit o 24-bit (sin pérdida en alta resolución).
+   - Para MP3: 320 kbps, 256 kbps, 192 kbps o 128 kbps.
 5. Haz clic en "Iniciar Separación".
 
 4. NATIVE ENSEMBLE (FUSIÓN DE MODELOS)
@@ -79,13 +86,20 @@ CREAR PREAJUSTES PERSONALIZADOS:
 - Haz clic en Guardar. El preajuste aparecerá de inmediato en el menú principal.
 - Para eliminarlo, selecciónalo del menú y haz clic en el botón "X" a su lado.
 
+IMPORTAR Y EXPORTAR PREAJUSTES:
+- Haz clic en "Exportar preajustes" (o menú Archivo -> "Exportar Preajustes...") para guardar tus preajustes en un archivo JSON portátil.
+- Haz clic en "Importar preajustes" (o menú Archivo -> "Importar Preajustes...") para cargar preajustes JSON creados en otras máquinas o copias de seguridad.
+- También disponible por línea de comandos mediante `--export-presets [archivo.json]` y `--import-presets <archivo.json>`.
+
 PREAJUSTES DE SISTEMA DISPONIBLES:
 - Separación Vocal: Separa Instrumental/Voces, luego divide Voces en Lead y Backing.
 - De-Reverb Vocal: Extrae voces y elimina automáticamente el eco y la reverberación.
 - Stems Definitivos (7 Pistas): Extracción de Voces e Instrumental, y división del
   Instrumental en Bajo, Batería, Piano, Guitarra y Otros + archivo Extra.
-- Ultimate Stems + Drum Split: Preajuste de 4 pasos que extrae Lead, Backing, Bajo,
-  Piano, Guitarra y divide la batería en componentes individuales (Cassa, Caja, etc.).
+- Ultimate Stems + Drum Split: Preajuste de 5 pasos que extrae Instrumental
+  completo (_Instrumental, con cuerdas incluidas), Cuerdas (_Strings), Lead
+  Vocals, Backing Vocals, Bajo, Piano, Guitarra, Otros y divide la batería en
+  componentes individuales (Bombo, Caja, Platos, Tom, etc., para 15 pistas en total).
 - Extracción de Guitarra: Preajuste optimizado para aislar las guitarras.
 - Separación Hombre/Mujer: Divide la pista vocal en voz masculina y femenina.
 - Restauración de Vivo: Extrae el ruido del público y limpia la música del escenario.
@@ -99,7 +113,7 @@ PREAJUSTES DE SISTEMA DISPONIBLES:
 - Usar subcarpeta: Crea una carpeta con el nombre de la canción. Recomendado
   para mantener limpios los archivos de salida.
 - Eliminar stems silenciosos: Si se activa, borra los stems generados con un
-  volumen inferior a -50 dB (puro silencio).
+  volumen inferior al umbral configurado (-20 dB a -80 dB en pasos de 5 dB; por defecto: -50 dB).
 - Reproducir Stem: Haz clic para escuchar al instante cualquier stem generado
   en el reproductor predeterminado del sistema.
 
@@ -117,5 +131,54 @@ los botones "Explorar" y "Seleccionar Carpeta" como origen.
 -------------------------------------------------------------------------------
 Los archivos de salida tendrán sufijos claros como:
 _Vocals, _Instrumental, _Lead, _Backing, _DeReverb, _Other, _Extra, _Drums, _No_Drums.
+
+10. INTERFAZ DE LÍNEA DE COMANDOS (CLI / MODO HEADLESS)
+-------------------------------------------------------------------------------
+A partir de la versión 1.7, Music Separator incluye una completa interfaz de línea
+de comandos para automatizar la separación de audio sin abrir la interfaz gráfica.
+
+SINTAXIS GENERAL:
+  music-separator -i <archivo(s)_de_audio> [opciones]
+
+PARÁMETROS PRINCIPALES:
+  -i, --input <archivos...>   Uno o varios archivos, carpetas o patrones glob (ej. *.wav).
+  -o, --output-dir <dir>      Carpeta de salida donde guardar los stems (por defecto: ./output).
+  -m, --model <nombre>        Nombre descriptivo, alias o fragmento del modelo (no requiere extensiones como .ckpt/.onnx, ej. "Viperx-1297" o "Inst_HQ_5").
+  -p, --preset <nombre>       Nombre o clave del preajuste (ej. preset_vocal_split o "Denoise + Vocals").
+  -r, --recursive             Escanea subcarpetas recursivamente cuando la entrada es una carpeta.
+  --format {WAV,FLAC,MP3}     Formato de audio de salida (por defecto: WAV).
+  --bit-depth {16,24,32}      Profundidad de bits para WAV (16, 24, 32 Float) y FLAC (16, 24).
+  --bitrate {320k,256k,192k}  Bitrate para formato MP3 (por defecto: 320k).
+  --gpu                       Fuerza la aceleración GPU (CUDA / Apple MPS).
+  --cpu                       Fuerza el procesamiento solo por CPU.
+  --no-subfolder              Guarda directamente en la carpeta de salida sin crear subcarpetas.
+  --clean-names               Elimina los números iniciales de pista de los nombres de carpeta.
+  --delete-silent-stems       Elimina automáticamente los stems que contengan solo silencio.
+  --silent-stem-threshold <dB> Umbral en dB por debajo del cual un stem se considera silencio (ej. -50, -45, -60; por defecto: -50 dB).
+  --chunk-duration <segundos> Procesa el audio en bloques de N segundos (ideal para audios largos/poca VRAM).
+  --preview {first,final}     Procesa solo 30 segundos de vista previa (primeros o últimos 30s).
+  -l, --list-models           Lista todos los modelos del catálogo y su estado de descarga.
+  --list-presets              Lista todos los preajustes de sistema y personalizados.
+  --download-model <modelo>   Descarga un modelo al catálogo local y sale.
+  -q, --quiet                 Minimiza la salida en consola (muestra solo errores y finalización).
+  -v, --version               Muestra la versión de la aplicación y sale.
+
+EJEMPLOS EN WINDOWS:
+  - Separación con modelo:
+    "Music separator.exe" -i cancion.wav -m "BS-Roformer-SW.ckpt" -o "./output"
+  - Separación con preajuste:
+    "Music separator.exe" -i cancion.wav --preset "preset_vocal_split"
+  - Procesamiento de carpeta completa (recursivo):
+    "Music separator.exe" -i "D:\Musica\Album" -r --preset "preset_vocal_split"
+  - Listar modelos y preajustes:
+    "Music separator.exe" --list-models
+    "Music separator.exe" --list-presets
+
+EJEMPLOS EN macOS (TERMINAL):
+  - Ejecución directa:
+    "/Applications/Music Separator/Music separator.app/Contents/MacOS/Music separator" -i cancion.wav -m "BS-Roformer-SW.ckpt"
+  - Crear alias rápido en ~/.zshrc:
+    alias music-separator='"/Applications/Music Separator/Music separator.app/Contents/MacOS/Music separator"'
+    music-separator -i cancion.wav --preset "preset_vocal_split"
 
 ===============================================================================

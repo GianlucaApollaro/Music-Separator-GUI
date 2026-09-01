@@ -16,6 +16,7 @@ class ModelManager:
         self.downloadable_models: Dict[str, Dict[str, str]] = {}
         self.downloadable_models_by_file: Dict[str, Dict[str, str]] = {}
         self.downloadable_aliases: Dict[str, Dict[str, str]] = {}
+        self._models_dir_files: Optional[set] = None  # cached listing, avoids hundreds of os.path.exists on the UI thread
         
         self.models_dict: Dict[str, List[str]] = {
             "Favorites": [
@@ -95,6 +96,15 @@ class ModelManager:
             ],
             "Multi-Stem Models": [
                 "bs_roformer_multistem.safetensors",
+                "mvsep_mega_model_bs_roformer_53_stems_v1.ckpt"
+            ],
+            "Specialized Instrument Models": [
+                "gilliaan_bowedstrings_bs_v1.ckpt",
+                "model_bs_roformer_ep_1_sdr_4.9869_fixed.ckpt",
+                "mel_band_roformer_guitar_becruily.ckpt"
+            ],
+            "Duet & Vocal Separation": [
+                "model_mel_band_roformer_ep_0_sdr_7.9319_fixed.ckpt"
             ],
             "anvuew Custom Models": [
                 "bs_roformer_anvuew_sdr_12.45.ckpt",
@@ -111,11 +121,23 @@ class ModelManager:
         threading.Thread(target=self._sync_models_json, daemon=True).start()
 
     def add_ready_callback(self, cb: Callable):
+        def _safe_call():
+            try:
+                if wx.GetApp():
+                    wx.CallAfter(cb)
+                else:
+                    cb()
+            except Exception:
+                try:
+                    cb()
+                except Exception:
+                    pass
+
         if not self._ready_event.is_set():
             # Wait for ready signal if not set yet
-            threading.Thread(target=lambda: (self._ready_event.wait(), wx.CallAfter(cb)), daemon=True).start()
+            threading.Thread(target=lambda: (self._ready_event.wait(), _safe_call()), daemon=True).start()
         else:
-            wx.CallAfter(cb)
+            _safe_call()
             self._observers.append(cb)
 
     def _sync_models_json(self):
@@ -123,20 +145,40 @@ class ModelManager:
         url = "https://raw.githubusercontent.com/TRvlvr/application_data/main/filelists/download_checks.json"
         
         try:
-            download_file(url, json_path, overwrite=True, timeout=(5, 15))
-        except Exception as e:
-            logger.warning(f"Skipping model list sync: {e}")
-            
-        if os.path.exists(json_path):
-            self._parse_models_json(json_path)
+            try:
+                download_file(url, json_path, overwrite=True, timeout=(5, 15))
+            except Exception as e:
+                logger.warning(f"Skipping model list sync: {e}")
 
-        # Add downloaded models to dictionary
-        if self.downloadable_models:
-             self.models_dict["From download_checks.json"] = list(self.downloadable_models.keys())
+            if os.path.exists(json_path):
+                self._parse_models_json(json_path)
 
-        self._loading = False
-        for cb in self._observers:
-            wx.CallAfter(cb)
+            # Custom models must be registered even if the catalog is missing or
+            # corrupted, otherwise their download URLs are lost entirely.
+            try:
+                self._inject_custom_models()
+            except Exception as e:
+                logger.exception(f"Failed to inject custom models: {e}")
+
+            # Add downloaded models to dictionary
+            if self.downloadable_models:
+                self.models_dict["From download_checks.json"] = list(self.downloadable_models.keys())
+        finally:
+            # Always signal readiness: without this, a missing catalog leaves every
+            # consumer blocked on _ready_event.wait() and the model tree empty.
+            self._loading = False
+            self._ready_event.set()
+            for cb in self._observers:
+                try:
+                    if wx.GetApp():
+                        wx.CallAfter(cb)
+                    else:
+                        cb()
+                except Exception:
+                    try:
+                        cb()
+                    except Exception:
+                        pass
 
     def _parse_models_json(self, json_path: str):
         try:
@@ -179,13 +221,8 @@ class ModelManager:
                             for fname in normalized_info.keys():
                                 if any(fname.endswith(ext) for ext in ['.ckpt', '.onnx', '.th', '.pth']):
                                     self.downloadable_models_by_file[fname] = normalized_info
-
-            self._inject_custom_models()
         except Exception as e:
-            logger.error(f"Error syncing models: {e}")
-        finally:
-            self._loading = False
-            self._ready_event.set()
+            logger.exception(f"Error parsing model catalog: {e}")
 
     def _inject_custom_models(self):
         becruily_deux_info = {
@@ -400,6 +437,64 @@ class ModelManager:
         self.downloadable_models["Roformer Model: Dereverb BS-Roformer | (by anvuew)"] = anvuew_dereverb_info
         self.downloadable_models_by_file["dereverb_bs_roformer_anvuew_sdr_22.5050.ckpt"] = anvuew_dereverb_info
 
+        # -----------------------------------------------------------------------
+        # MVSep Mega 53 Stems Model (ZFTurbo v1.0.21)
+        # BS-Roformer architecture separating 53 distinct musical stems.
+        # -----------------------------------------------------------------------
+        _mvsep_53_base = "https://github.com/ZFTurbo/Music-Source-Separation-Training/releases/download/v1.0.21/"
+        mvsep_53_info = {
+            "mvsep_mega_model_bs_roformer_53_stems_v1.ckpt": _mvsep_53_base + "mvsep_mega_model_bs_roformer_53_stems_v1.ckpt",
+            "mvsep_mega_model_bs_roformer_53_stems.yaml": _mvsep_53_base + "mvsep_mega_model_bs_roformer_53_stems.yaml",
+        }
+        self.downloadable_models["Roformer Model: MVSep Mega 53 Stems | (by ZFTurbo)"] = mvsep_53_info
+        self.downloadable_models_by_file["mvsep_mega_model_bs_roformer_53_stems_v1.ckpt"] = mvsep_53_info
+        self.downloadable_aliases["53_stems"] = mvsep_53_info
+        self.downloadable_aliases["53stems"] = mvsep_53_info
+        self.downloadable_aliases["mvsep_mega"] = mvsep_53_info
+
+        # -----------------------------------------------------------------------
+        # BS-Roformer BowedStrings Duality (gilliaan)
+        # -----------------------------------------------------------------------
+        _bowed_strings_base = "https://huggingface.co/oulianov/BS-Roformer-BowedStrings-Duality/resolve/main/"
+        bowed_strings_info = {
+            "gilliaan_bowedstrings_bs_v1.ckpt": _bowed_strings_base + "gilliaan_bowedstrings_bs_v1.ckpt",
+            "gilliaan_bsroformer_bowedstrings_v1.yaml": _bowed_strings_base + "gilliaan_bsroformer_bowedstrings_v1.yaml",
+        }
+        self.downloadable_models["Roformer Model: BS-Roformer BowedStrings Duality | (by gilliaan)"] = bowed_strings_info
+        self.downloadable_models_by_file["gilliaan_bowedstrings_bs_v1.ckpt"] = bowed_strings_info
+        self.downloadable_aliases["bowed_strings"] = bowed_strings_info
+        self.downloadable_aliases["bowedstrings"] = bowed_strings_info
+        self.downloadable_aliases["strings_duality"] = bowed_strings_info
+        self.downloadable_aliases["archi"] = bowed_strings_info
+
+        # -----------------------------------------------------------------------
+        # MelBand-Roformer Duet (DryPaintMan)
+        # -----------------------------------------------------------------------
+        _duet_base = "https://huggingface.co/DryPaintMan/MelBandRoformer-Duet/resolve/main/"
+        duet_info = {
+            "model_mel_band_roformer_ep_0_sdr_7.9319_fixed.ckpt": _duet_base + "model_mel_band_roformer_ep_0_sdr_7.9319_fixed.ckpt",
+            "config_mel_band_roformer_duet_dual-mlp2.yaml": _duet_base + "config_mel_band_roformer_duet_dual-mlp2.yaml",
+        }
+        self.downloadable_models["Roformer Model: MelBand-Roformer Duet | (by DryPaintMan)"] = duet_info
+        self.downloadable_models_by_file["model_mel_band_roformer_ep_0_sdr_7.9319_fixed.ckpt"] = duet_info
+        self.downloadable_aliases["duet"] = duet_info
+        self.downloadable_aliases["duetto"] = duet_info
+        self.downloadable_aliases["melband_duet"] = duet_info
+
+        # -----------------------------------------------------------------------
+        # BS-Roformer Lead Synth (oulianov)
+        # -----------------------------------------------------------------------
+        _synth_base = "https://huggingface.co/oulianov/bsroformer-lead-synth/resolve/main/"
+        synth_info = {
+            "model_bs_roformer_ep_1_sdr_4.9869_fixed.ckpt": _synth_base + "model_bs_roformer_ep_1_sdr_4.9869_fixed.ckpt",
+            "config_bs_roformer_synth_lead.yaml": _synth_base + "config_bs_roformer_synth_lead.yaml",
+        }
+        self.downloadable_models["Roformer Model: BS-Roformer Lead Synth | (by oulianov)"] = synth_info
+        self.downloadable_models_by_file["model_bs_roformer_ep_1_sdr_4.9869_fixed.ckpt"] = synth_info
+        self.downloadable_aliases["lead_synth"] = synth_info
+        self.downloadable_aliases["synth"] = synth_info
+        self.downloadable_aliases["synth_lead"] = synth_info
+
         # Demucs aliases to help resolve and download
         self.downloadable_aliases["htdemucs"] = {"htdemucs.yaml": ""}
         self.downloadable_aliases["htdemucs_ft"] = {"htdemucs_ft.yaml": ""}
@@ -424,6 +519,19 @@ class ModelManager:
             logger.warning("Model catalog not ready yet, returning partial categories.")
         return self.models_dict
 
+    def _get_model_files(self) -> set:
+        """Cached set of filenames present in models_dir (one listdir instead of
+        hundreds of os.path.exists calls). Invalidated when a model is downloaded."""
+        if self._models_dir_files is None:
+            try:
+                self._models_dir_files = set(os.listdir(self.models_dir))
+            except OSError:
+                self._models_dir_files = set()
+        return self._models_dir_files
+
+    def _invalidate_model_files_cache(self):
+        self._models_dir_files = None
+
     def is_model_downloaded(self, model_name: str) -> bool:
         """Check if all required files for a model are present locally."""
         files_to_download = {}
@@ -434,15 +542,12 @@ class ModelManager:
         elif model_name in self.downloadable_models_by_file:
             files_to_download = self.downloadable_models_by_file[model_name]
 
-        if not files_to_download:
-            dest_path = os.path.join(self.models_dir, model_name)
-            return os.path.exists(dest_path)
+        local_files = self._get_model_files()
 
-        for fname in files_to_download.keys():
-            dest_path = os.path.join(self.models_dir, fname)
-            if not os.path.exists(dest_path):
-                return False
-        return True
+        if not files_to_download:
+            return model_name in local_files
+
+        return all(fname in local_files for fname in files_to_download.keys())
 
     def resolve_and_download(self, model_name: str, logger_callback: Callable[[str], None], progress_callback: Callable[[float, float], None]) -> Optional[str]:
         files_to_download = {}
@@ -472,6 +577,7 @@ class ModelManager:
                     if not download_file(url, dest_path, progress_callback, timeout=(15, 60)):
                         raise Exception(f"Failed to download {fname}")
                     downloaded_files.append(dest_path)
+                    self._invalidate_model_files_cache()
                     logger_callback(f"Downloaded {fname}\n")
                 else:
                     logger_callback(f"Found local: {fname}\n")

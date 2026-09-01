@@ -61,6 +61,11 @@ class ModelTreePicker(wx.Panel):
         # Prevents EVT_MODEL_SELECTED from firing during Populate / SetValue
         self._programmatic_update = False
 
+        # Debounce: rebuild the tree only after a short pause in typing, instead
+        # of on every keystroke.
+        self._search_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._on_search_timer, self._search_timer)
+
         self._is_mac = sys.platform == 'darwin'
 
         outer = wx.BoxSizer(wx.VERTICAL)
@@ -279,7 +284,13 @@ class ModelTreePicker(wx.Panel):
         event.Skip()
 
     def _on_search(self, event):
-        """Filter the picker in real time; return focus to the search field.
+        """Debounce the realtime filter: restart a short timer on each keystroke
+        so the tree rebuild only runs once the user pauses typing."""
+        self._search_timer.StartOnce(250)
+        event.Skip()
+
+    def _on_search_timer(self):
+        """Filter the picker; return focus to the search field.
 
         Selection shifts might steal focus on Windows, so we restore it
         to the search TextCtrl after every rebuild.
@@ -289,4 +300,3 @@ class ModelTreePicker(wx.Panel):
         self._programmatic_update = False
         wx.CallAfter(self.search.SetFocus)
         wx.CallAfter(self.search.SetInsertionPointEnd)
-        event.Skip()

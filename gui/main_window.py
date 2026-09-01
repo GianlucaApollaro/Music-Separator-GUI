@@ -18,6 +18,7 @@ class MainWindow(wx.Frame):
         super(MainWindow, self).__init__(parent, title=f"{i18n.tr('app_title')} v{__version__}", size=(620, 720))
         
         self.worker = None
+        self._download_thread = None  # model download/resolve thread, tracked for OnClose
         self.model_manager = ModelManager()
         self.last_output_files = []  # paths of last generated stems, for playback
         # Mapping between display names (no extension) and actual filenames
@@ -108,6 +109,13 @@ class MainWindow(wx.Frame):
         menubar = wx.MenuBar()
         fileMenu = wx.Menu()
         
+        # Preset Import / Export
+        importPresetItem = fileMenu.Append(wx.ID_ANY, i18n.tr("menu_import_preset"))
+        exportPresetItem = fileMenu.Append(wx.ID_ANY, i18n.tr("menu_export_preset"))
+        self.Bind(wx.EVT_MENU, self.OnImportPreset, importPresetItem)
+        self.Bind(wx.EVT_MENU, self.OnExportPreset, exportPresetItem)
+        fileMenu.AppendSeparator()
+
         # Language Submenu
         langMenu = wx.Menu()
         enItem = langMenu.Append(wx.ID_ANY, i18n.tr("menu_english"), kind=wx.ITEM_RADIO)
@@ -225,11 +233,25 @@ class MainWindow(wx.Frame):
         self.hbox_preset.Add(self.cb_preset, proportion=1, flag=wx.EXPAND)
         
         self.btn_add_preset = wx.Button(self.panel, label=i18n.tr("preset_btn_create"))
+        self.btn_add_preset.SetName(i18n.tr("preset_add_tooltip"))
         self.btn_add_preset.SetToolTip(i18n.tr("preset_add_tooltip"))
         self.btn_add_preset.Bind(wx.EVT_BUTTON, self.OnCreatePreset)
         self.hbox_preset.Add(self.btn_add_preset, flag=wx.LEFT | wx.ALIGN_CENTER_VERTICAL, border=5)
+
+        self.btn_import_preset = wx.Button(self.panel, label=i18n.tr("preset_btn_import"))
+        self.btn_import_preset.SetName(i18n.tr("preset_import_tooltip"))
+        self.btn_import_preset.SetToolTip(i18n.tr("preset_import_tooltip"))
+        self.btn_import_preset.Bind(wx.EVT_BUTTON, self.OnImportPreset)
+        self.hbox_preset.Add(self.btn_import_preset, flag=wx.LEFT | wx.ALIGN_CENTER_VERTICAL, border=5)
+
+        self.btn_export_preset = wx.Button(self.panel, label=i18n.tr("preset_btn_export"))
+        self.btn_export_preset.SetName(i18n.tr("preset_export_tooltip"))
+        self.btn_export_preset.SetToolTip(i18n.tr("preset_export_tooltip"))
+        self.btn_export_preset.Bind(wx.EVT_BUTTON, self.OnExportPreset)
+        self.hbox_preset.Add(self.btn_export_preset, flag=wx.LEFT | wx.ALIGN_CENTER_VERTICAL, border=5)
         
         self.btn_delete_preset = wx.Button(self.panel, label="X", size=(28, 28))
+        self.btn_delete_preset.SetName(i18n.tr("preset_delete_tooltip"))
         self.btn_delete_preset.SetToolTip(i18n.tr("preset_delete_tooltip"))
         self.btn_delete_preset.Bind(wx.EVT_BUTTON, self.OnDeletePreset)
         self.btn_delete_preset.Disable()
@@ -241,16 +263,10 @@ class MainWindow(wx.Frame):
         hbox4 = wx.BoxSizer(wx.HORIZONTAL)
         self.chk_gpu = wx.CheckBox(self.panel, label=i18n.tr("use_gpu"))
         
-        # Check GPU availability
-        import torch
-        has_cuda = torch.cuda.is_available()
-        has_mps = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
-        has_gpu = has_cuda or has_mps
-        if has_gpu:
-            self.chk_gpu.SetValue(True)
-        else:
-            self.chk_gpu.SetValue(False)
-            self.chk_gpu.Disable()
+        # Check GPU availability asynchronously: importing torch synchronously in
+        # InitUI would freeze the window for seconds at startup.
+        self.chk_gpu.SetValue(False)
+        threading.Thread(target=self._check_gpu_async, daemon=True).start()
             
         hbox4.Add(self.chk_gpu)
 
@@ -284,21 +300,54 @@ class MainWindow(wx.Frame):
 
         self.chk_delete_silent = wx.CheckBox(self.panel, label=i18n.tr("delete_silent_stems"))
         self.chk_delete_silent.SetValue(config.get("delete_silent_stems", False))
-        hbox_files.Add(self.chk_delete_silent, flag=wx.LEFT, border=15)
+        self.chk_delete_silent.Bind(wx.EVT_CHECKBOX, self.OnToggleDeleteSilent)
+        hbox_files.Add(self.chk_delete_silent, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL, border=15)
+
+        self.st_silent_threshold = wx.StaticText(self.panel, label=i18n.tr("silent_stem_threshold_label"))
+        hbox_files.Add(self.st_silent_threshold, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL, border=10)
+
+        self.silent_threshold_values = [-20, -25, -30, -35, -40, -45, -50, -55, -60, -65, -70, -75, -80]
+        self.silent_threshold_choices = [f"{val} dB" for val in self.silent_threshold_values]
+        self.cb_silent_threshold = wx.ComboBox(
+            self.panel,
+            choices=self.silent_threshold_choices,
+            style=wx.CB_DROPDOWN | wx.CB_READONLY,
+            size=(85, -1)
+        )
+        saved_threshold = config.get("silent_stem_threshold", -50)
+        try:
+            th_idx = self.silent_threshold_values.index(int(saved_threshold))
+        except (ValueError, TypeError):
+            th_idx = self.silent_threshold_values.index(-50)
+        self.cb_silent_threshold.SetSelection(th_idx)
+        self.cb_silent_threshold.SetName(i18n.tr("silent_stem_threshold_name"))
+        self.cb_silent_threshold.SetHelpText(i18n.tr("silent_stem_threshold_name"))
+        if not self.chk_delete_silent.GetValue():
+            self.cb_silent_threshold.Disable()
+            self.st_silent_threshold.Disable()
+        hbox_files.Add(self.cb_silent_threshold, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL, border=5)
         vbox.Add(hbox_files, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
 
-        # --- Row 6: Output Format & Preview ---
+        # --- Row 6: Output Format, Quality/Bitdepth & Preview ---
         hbox_format = wx.BoxSizer(wx.HORIZONTAL)
         self.st_format = wx.StaticText(self.panel, label=i18n.tr("output_format"))
-        hbox_format.Add(self.st_format, flag=wx.RIGHT|wx.ALIGN_CENTER_VERTICAL, border=10)
+        hbox_format.Add(self.st_format, flag=wx.RIGHT|wx.ALIGN_CENTER_VERTICAL, border=5)
         self.cb_format = wx.ComboBox(self.panel, choices=['WAV', 'FLAC', 'MP3'], style=wx.CB_DROPDOWN | wx.CB_READONLY)
         self.cb_format.SetValue(config.get("output_format", 'WAV'))
+        self.cb_format.Bind(wx.EVT_COMBOBOX, self.OnFormatChanged)
         hbox_format.Add(self.cb_format, flag=wx.ALIGN_CENTER_VERTICAL)
+
+        self.st_quality = wx.StaticText(self.panel, label=i18n.tr("bit_depth_label"))
+        hbox_format.Add(self.st_quality, flag=wx.LEFT|wx.RIGHT|wx.ALIGN_CENTER_VERTICAL, border=10)
+        self.cb_quality = wx.ComboBox(self.panel, choices=[], style=wx.CB_DROPDOWN | wx.CB_READONLY)
+        self.cb_quality.Bind(wx.EVT_COMBOBOX, self.OnQualityChanged)
+        hbox_format.Add(self.cb_quality, flag=wx.ALIGN_CENTER_VERTICAL)
+        self._update_quality_combo(self.cb_format.GetValue())
         
         self.chk_preview = wx.CheckBox(self.panel, label=i18n.tr("enable_preview"))
         self.chk_preview.SetValue(config.get("enable_preview", False))
         self.chk_preview.Bind(wx.EVT_CHECKBOX, self.OnTogglePreview)
-        hbox_format.Add(self.chk_preview, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL, border=25)
+        hbox_format.Add(self.chk_preview, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL, border=20)
         
         self.cb_preview_mode = wx.ComboBox(self.panel, choices=[i18n.tr("preview_first_30"), i18n.tr("preview_final_30")], style=wx.CB_DROPDOWN | wx.CB_READONLY)
         preview_mode = config.get("preview_mode", "first")
@@ -381,6 +430,63 @@ class MainWindow(wx.Frame):
         self.cb_preview_mode.Show(show)
         self.panel.Layout()
 
+    def OnFormatChanged(self, event=None):
+        fmt = self.cb_format.GetValue()
+        self._update_quality_combo(fmt)
+        config.set("output_format", fmt)
+        self.panel.Layout()
+
+    def OnQualityChanged(self, event=None):
+        fmt = self.cb_format.GetValue().upper()
+        val = self.cb_quality.GetValue()
+        if fmt == "WAV":
+            config.set("wav_bit_depth", val)
+        elif fmt == "FLAC":
+            config.set("flac_bit_depth", val)
+        elif fmt == "MP3":
+            config.set("mp3_bitrate", val)
+
+    def _update_quality_combo(self, fmt):
+        fmt = (fmt or "WAV").upper()
+        current_val = self.cb_quality.GetValue()
+        self.cb_quality.Clear()
+        if fmt == "WAV":
+            self.st_quality.SetLabel(i18n.tr("bit_depth_label"))
+            self.cb_quality.SetName(i18n.tr("bit_depth_name_wav"))
+            choices = ["16-bit", "24-bit", "32-bit Float"]
+            self.cb_quality.Append(choices)
+            saved = config.get("wav_bit_depth", "24-bit")
+            if saved in choices:
+                self.cb_quality.SetValue(saved)
+            else:
+                self.cb_quality.SetSelection(1)
+        elif fmt == "FLAC":
+            self.st_quality.SetLabel(i18n.tr("bit_depth_label"))
+            self.cb_quality.SetName(i18n.tr("bit_depth_name_flac"))
+            choices = ["16-bit", "24-bit"]
+            self.cb_quality.Append(choices)
+            saved = config.get("flac_bit_depth", "24-bit")
+            if saved in choices:
+                self.cb_quality.SetValue(saved)
+            else:
+                self.cb_quality.SetSelection(1)
+        elif fmt == "MP3":
+            self.st_quality.SetLabel(i18n.tr("bitrate_label"))
+            self.cb_quality.SetName(i18n.tr("bitrate_name_mp3"))
+            choices = ["320 kbps", "256 kbps", "192 kbps", "128 kbps"]
+            self.cb_quality.Append(choices)
+            saved = config.get("mp3_bitrate", "320 kbps")
+            if saved in choices:
+                self.cb_quality.SetValue(saved)
+            else:
+                self.cb_quality.SetSelection(0)
+
+    def OnToggleDeleteSilent(self, event):
+        enable = self.chk_delete_silent.GetValue()
+        self.cb_silent_threshold.Enable(enable)
+        if hasattr(self, 'st_silent_threshold'):
+            self.st_silent_threshold.Enable(enable)
+
     def OnPresetChange(self, event):
         idx = self.cb_preset.GetSelection()
         if idx == wx.NOT_FOUND:
@@ -416,7 +522,13 @@ class MainWindow(wx.Frame):
         self.chk_remove_numbers.SetLabel(i18n.tr("remove_leading_numbers"))
         self.chk_use_subfolder.SetLabel(i18n.tr("use_subfolder"))
         self.chk_delete_silent.SetLabel(i18n.tr("delete_silent_stems"))
+        if hasattr(self, 'st_silent_threshold'):
+            self.st_silent_threshold.SetLabel(i18n.tr("silent_stem_threshold_label"))
+        if hasattr(self, 'cb_silent_threshold'):
+            self.cb_silent_threshold.SetName(i18n.tr("silent_stem_threshold_name"))
+            self.cb_silent_threshold.SetHelpText(i18n.tr("silent_stem_threshold_name"))
         self.st_format.SetLabel(i18n.tr("output_format"))
+        self._update_quality_combo(self.cb_format.GetValue())
         self.chk_preview.SetLabel(i18n.tr("enable_preview"))
         
         current_selection = self.cb_preview_mode.GetSelection()
@@ -542,19 +654,28 @@ class MainWindow(wx.Frame):
         model_name_2 = self.display_to_file.get(display_name_2, display_name_2)
 
         # Save user configuration (store the filenames/display names as seen in UI)
-        config.set("output_dir", output_dir)
-        config.set("model_1", display_name_1)
-        config.set("model_2", display_name_2)
-        config.set("preset", self.cb_preset.GetSelection())
-        config.set("enable_ensemble", self.chk_ensemble.GetValue())
-        config.set("output_format", self.cb_format.GetValue())
-        config.set("remove_leading_numbers", self.chk_remove_numbers.GetValue())
-        config.set("use_subfolder", self.chk_use_subfolder.GetValue())
-        config.set("delete_silent_stems", self.chk_delete_silent.GetValue())
-        config.set("chunk_enable", self.chk_chunk.GetValue())
-        config.set("chunk_size_idx", self.cb_chunk.GetSelection())
-        config.set("enable_preview", self.chk_preview.GetValue())
-        config.set("preview_mode", "final" if self.cb_preview_mode.GetSelection() == 1 else "first")
+        out_format = self.cb_format.GetValue()
+        quality_val = self.cb_quality.GetValue()
+        
+        config.set_many({
+            "output_dir": output_dir,
+            "model_1": display_name_1,
+            "model_2": display_name_2,
+            "preset": self.cb_preset.GetSelection(),
+            "enable_ensemble": self.chk_ensemble.GetValue(),
+            "output_format": out_format,
+            "wav_bit_depth": quality_val if out_format == "WAV" else config.get("wav_bit_depth", "24-bit"),
+            "flac_bit_depth": quality_val if out_format == "FLAC" else config.get("flac_bit_depth", "24-bit"),
+            "mp3_bitrate": quality_val if out_format == "MP3" else config.get("mp3_bitrate", "320 kbps"),
+            "remove_leading_numbers": self.chk_remove_numbers.GetValue(),
+            "use_subfolder": self.chk_use_subfolder.GetValue(),
+            "delete_silent_stems": self.chk_delete_silent.GetValue(),
+            "silent_stem_threshold": self.silent_threshold_values[self.cb_silent_threshold.GetSelection()] if self.cb_silent_threshold.GetSelection() != wx.NOT_FOUND else -50,
+            "chunk_enable": self.chk_chunk.GetValue(),
+            "chunk_size_idx": self.cb_chunk.GetSelection(),
+            "enable_preview": self.chk_preview.GetValue(),
+            "preview_mode": "final" if self.cb_preview_mode.GetSelection() == 1 else "first",
+        })
 
         if not input_string:
             wx.MessageBox(i18n.tr("msg_select_input"), i18n.tr("msg_error_title"), wx.OK | wx.ICON_ERROR)
@@ -596,6 +717,7 @@ class MainWindow(wx.Frame):
         remove_leading_numbers = self.chk_remove_numbers.GetValue()
         use_subfolder = self.chk_use_subfolder.GetValue()
         delete_silent_stems = self.chk_delete_silent.GetValue()
+        silent_stem_threshold = self.silent_threshold_values[self.cb_silent_threshold.GetSelection()] if self.cb_silent_threshold.GetSelection() != wx.NOT_FOUND else -50
         enable_preview = self.chk_preview.GetValue()
         preview_mode = "final" if self.cb_preview_mode.GetSelection() == 1 else "first"
 
@@ -615,40 +737,40 @@ class MainWindow(wx.Frame):
         def _download_and_launch():
             """Background thread: resolves/downloads models, then starts SeparationThread."""
             if preset_config:
-                m1 = self.model_manager.resolve_and_download(preset_config["model_1"], logger_cb, progress_cb)
-                if not m1:
-                    _abort()
-                    return
-                m2 = None
-                if "model_2" in preset_config:
-                    m2 = self.model_manager.resolve_and_download(preset_config["model_2"], logger_cb, progress_cb)
-                    if not m2:
+                resolved_models = []
+                step_idx = 1
+                while True:
+                    m_key = f"model_{step_idx}"
+                    if m_key not in preset_config:
+                        break
+                    m_val = self.model_manager.resolve_and_download(preset_config[m_key], logger_cb, progress_cb)
+                    if not m_val:
                         _abort()
                         return
-                
-                m3 = None
-                if "model_3" in preset_config:
-                    m3 = self.model_manager.resolve_and_download(preset_config["model_3"], logger_cb, progress_cb)
-                    if not m3:
-                        _abort()
-                        return
+                    resolved_models.append(m_val)
+                    step_idx += 1
 
-                m4 = None
-                if "model_4" in preset_config:
-                    m4 = self.model_manager.resolve_and_download(preset_config["model_4"], logger_cb, progress_cb)
-                    if not m4:
-                        _abort()
-                        return
+                m1 = resolved_models[0] if len(resolved_models) > 0 else None
+                m2 = resolved_models[1] if len(resolved_models) > 1 else None
+                m3 = resolved_models[2] if len(resolved_models) > 2 else None
+                m4 = resolved_models[3] if len(resolved_models) > 3 else None
+                m5 = resolved_models[4] if len(resolved_models) > 4 else None
+
+                bit_depth = quality_val if out_format in ("WAV", "FLAC") else None
+                bitrate = quality_val if out_format == "MP3" else None
 
                 def _start_preset():
                     self.worker = SeparationThread(
                         self, input_files, output_dir, m1, use_gpu, out_format,
-                        m2, m3, m4, preset_config, chunk_duration=chunk_duration,
+                        m2, m3, m4, m5, preset_config, chunk_duration=chunk_duration,
                         remove_leading_numbers=remove_leading_numbers,
                         use_subfolder=use_subfolder,
                         delete_silent_stems=delete_silent_stems,
+                        silent_stem_threshold=silent_stem_threshold,
                         enable_preview=enable_preview,
-                        preview_mode=preview_mode
+                        preview_mode=preview_mode,
+                        bit_depth=bit_depth,
+                        bitrate=bitrate
                     )
                     self.worker.start()
                 wx.CallAfter(_start_preset)
@@ -669,6 +791,9 @@ class MainWindow(wx.Frame):
                     return
                 algo = ensemble_algorithm
 
+            bit_depth = quality_val if out_format in ("WAV", "FLAC") else None
+            bitrate = quality_val if out_format == "MP3" else None
+
             def _start_standard():
                 self.worker = SeparationThread(
                     self, input_files, output_dir, m1, use_gpu, out_format,
@@ -676,13 +801,17 @@ class MainWindow(wx.Frame):
                     remove_leading_numbers=remove_leading_numbers,
                     use_subfolder=use_subfolder,
                     delete_silent_stems=delete_silent_stems,
+                    silent_stem_threshold=silent_stem_threshold,
                     enable_preview=enable_preview,
-                    preview_mode=preview_mode
+                    preview_mode=preview_mode,
+                    bit_depth=bit_depth,
+                    bitrate=bitrate
                 )
                 self.worker.start()
             wx.CallAfter(_start_standard)
 
-        threading.Thread(target=_download_and_launch, daemon=True).start()
+        self._download_thread = threading.Thread(target=_download_and_launch, daemon=True)
+        self._download_thread.start()
 
     def OnStop(self, event):
         if self.worker:
@@ -729,7 +858,39 @@ class MainWindow(wx.Frame):
             )
             dlg.ShowModal()
 
+    def _check_gpu_async(self):
+        try:
+            import torch
+            has_gpu = torch.cuda.is_available() or (
+                hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+            )
+        except Exception:
+            has_gpu = False
+        wx.CallAfter(self._apply_gpu_state, has_gpu)
+
+    def _apply_gpu_state(self, has_gpu):
+        try:
+            if has_gpu:
+                self.chk_gpu.SetValue(True)
+            else:
+                self.chk_gpu.SetValue(False)
+                self.chk_gpu.Disable()
+        except RuntimeError:
+            pass  # window already destroyed
+
     def OnClose(self, event):
+        # During a model download self.worker is None, but the background thread
+        # still posts wx.CallAfter events: closing now would write to a destroyed
+        # frame. Block the close until the download finishes.
+        if self._download_thread and self._download_thread.is_alive():
+            wx.MessageBox(
+                i18n.tr("confirm_exit_during_download"),
+                i18n.tr("confirm"),
+                wx.OK | wx.ICON_INFORMATION
+            )
+            event.Veto()
+            return
+
         if self.worker and self.worker.is_alive():
             dlg = wx.MessageDialog(
                 self,
@@ -771,6 +932,60 @@ class MainWindow(wx.Frame):
             PresetManager.delete_custom_preset(preset_key)
             PresetManager.load_custom_presets()
             self.UpdatePresetDropdown("preset_none")
+
+    def OnExportPreset(self, event):
+        custom_keys = [k for k in PresetManager.preset_keys if k.startswith("custom_")]
+        if not custom_keys:
+            wx.MessageBox(i18n.tr("preset_export_none"), i18n.tr("preset_export_title"), wx.OK | wx.ICON_INFORMATION)
+            return
+
+        with wx.FileDialog(
+            self,
+            message=i18n.tr("preset_export_title"),
+            wildcard="JSON files (*.json)|*.json",
+            defaultFile="music_separator_presets.json",
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT
+        ) as fileDialog:
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return
+            save_path = fileDialog.GetPath()
+            count, err = PresetManager.export_presets(save_path, custom_keys)
+            if count > 0:
+                wx.MessageBox(
+                    i18n.tr("preset_export_success", count=count, path=save_path),
+                    i18n.tr("preset_export_title"),
+                    wx.OK | wx.ICON_INFORMATION
+                )
+            else:
+                wx.MessageBox(
+                    i18n.tr("preset_import_error", error=err),
+                    i18n.tr("preset_export_title"),
+                    wx.OK | wx.ICON_ERROR
+                )
+
+    def OnImportPreset(self, event):
+        with wx.FileDialog(
+            self,
+            message=i18n.tr("preset_import_title"),
+            wildcard="JSON files (*.json)|*.json",
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST
+        ) as fileDialog:
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return
+            open_path = fileDialog.GetPath()
+            count, names, err = PresetManager.import_presets(open_path)
+            if count > 0:
+                PresetManager.load_custom_presets()
+                self.UpdatePresetDropdown()
+                names_str = ", ".join(names)
+                wx.MessageBox(
+                    i18n.tr("preset_import_success", count=count, names=names_str),
+                    i18n.tr("preset_import_title"),
+                    wx.OK | wx.ICON_INFORMATION
+                )
+            else:
+                msg = i18n.tr("preset_import_invalid") if not err else i18n.tr("preset_import_error", error=err)
+                wx.MessageBox(msg, i18n.tr("preset_import_title"), wx.OK | wx.ICON_ERROR)
             
     def UpdatePresetDropdown(self, select_key="preset_none"):
         self.cb_preset.Clear()

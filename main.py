@@ -2,6 +2,16 @@ import sys
 import os
 import subprocess
 
+# If arguments are passed on Windows with a GUI-built executable, attach to parent console
+if sys.platform == 'win32' and len(sys.argv) > 1:
+    try:
+        import ctypes
+        if ctypes.windll.kernel32.AttachConsole(-1):
+            sys.stdout = open('CONOUT$', 'w', encoding='utf-8', errors='replace')
+            sys.stderr = open('CONOUT$', 'w', encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 if sys.stdout is None or sys.stderr is None:
     # When running with --noconsole, PyInstaller sets sys.stdout and sys.stderr to None.
     # However, some libraries (like audio-separator/FFmpeg) attempt to get the file
@@ -44,7 +54,6 @@ if os.name == 'nt':
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-import wx
 # Force PyInstaller to include these hidden dependencies
 try:
     import neuralop
@@ -52,9 +61,14 @@ try:
 except ImportError:
     pass
 
-from gui.main_window import MainWindow
-
 def main():
+    if len(sys.argv) > 1:
+        from gui.cli import run_cli
+        sys.exit(run_cli(sys.argv[1:]))
+
+    import wx
+    from gui.main_window import MainWindow
+
     app = wx.App(False)
     frame = MainWindow(None, title="Music separator")
     frame.Show()

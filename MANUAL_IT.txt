@@ -1,6 +1,6 @@
 ===============================================================================
                        MUSIC SEPARATOR - MANUALE UTENTE                       
-                       MANUALE ITALIANO (IT) - v1.6
+                       MANUALE ITALIANO (IT) - v1.7
 ===============================================================================
 
 Benvenuto in Music separator, un potente strumento per la separazione audio 
@@ -24,24 +24,28 @@ WINDOWS:
 
 macOS (Apple Silicon M1/M2/M3/M4):
 - Scarica la versione Mac (.zip) ed estrai l'archivio.
-- Sposta la cartella risultante in /Applications.
+- Sposta la cartella risultante in /Applications (es. /Applications/Music Separator).
 - Fai clic destro su 'Music separator.app' e scegli 'Apri'.
 - NOTA: FFmpeg e' incluso nel pacchetto. In caso di blocchi di sicurezza, 
   consulta il README per le istruzioni sul comando 'xattr'.
 
-2. NOVITÀ nella v1.6
+2. NOVITÀ nella v1.7
 -------------------------------------------------------------------------------
-- Preset Personalizzati dall'Utente: Ora puoi creare i tuoi preset cliccando
-  sul pulsante "Crea preset" accanto al selettore dei preset. Supporta preset
-  a modello singolo o catene multipasso, rinomina personalizzata degli stem
-  e unione dei rimanenti. I preset sono salvati nella cartella locale del
-  programma per una portabilità assoluta.
-- Raggruppamento Modelli Scaricati: I modelli scaricati localmente sono ora
-  raggruppati in cima all'elenco nella categoria "Modelli Scaricati (Offline)",
-  facilitando l'accesso rapido offline.
-- Accessibilità macOS VoiceOver: Rifattorizzato il selettore dei modelli su
-  macOS per utilizzare i controlli nativi del sistema, rendendo l'albero
-  pienamente navigabile da screen reader e VoiceOver.
+- Interfaccia a Riga di Comando (CLI / Headless): Ora puoi utilizzare Music Separator
+  direttamente da Terminale o prompt dei comandi, ideale per automazioni, script
+  e integrazione in DAW senza dover aprire l'interfaccia grafica.
+- Selezione Bit Depth e Bitrate Audio: Supporto completo per esportazione a 16-bit,
+  24-bit e 32-bit Float per WAV, 16-bit e 24-bit per FLAC, e bitrate personalizzato
+  (320k, 256k, 192k, 128k) per MP3 tramite un selettore dinamico accessibile.
+- Refactoring dei Patch di Runtime: Motore di monkey-patching completamente riscritto
+  e modulare, azzerando leak di memoria ed evitando wrapper ridondanti tra run successive.
+- Efficienza e Stabilità Migliorate: Scrittura atomica dei file di configurazione,
+  invalidazione intelligente della cache dei modelli e verifica rigorosa dei download.
+
+NOVITÀ nella v1.6:
+- Preset Personalizzati dall'Utente: Creazione di catene multipasso personalizzate.
+- Raggruppamento Modelli Scaricati (Offline).
+- Accessibilità VoiceOver su macOS.
 
 NOVITÀ nella v1.5:
 - Abilita Anteprima: Separa solo 30 secondi (primi o ultimi) in una cartella
@@ -58,7 +62,10 @@ NOVITÀ nella v1.5:
    - Su Windows/Linux, i modelli sono mostrati in un albero con barra di ricerca.
    - Su macOS, sono mostrati in una ListBox nativa e accessibile.
    - I modelli scaricati compaiono in cima sotto "Modelli Scaricati (Offline)".
-4. Seleziona il formato di uscita (WAV, FLAC, o MP3 a 320kbps).
+4. Seleziona il formato di uscita (WAV, FLAC o MP3) e la relativa qualità:
+   - Per WAV: 16-bit, 24-bit o 32-bit Float (qualità studio).
+   - Per FLAC: 16-bit o 24-bit (lossless ad alta risoluzione).
+   - Per MP3: 320 kbps, 256 kbps, 192 kbps o 128 kbps.
 5. Clicca su "Avvia Separazione".
 
 4. NATIVE ENSEMBLE (FUSIONE DI MODELLI)
@@ -80,13 +87,20 @@ CREARE PRESET PERSONALIZZATI:
 - Clicca su Salva. Il preset apparirà subito nel menu principale.
 - Per eliminare, seleziona il preset custom e premi il pulsante "X".
 
+IMPORTARE ED ESPORTARE PRESET:
+- Clicca su "Esporta preset" (o da menu File -> "Esporta Preset...") per salvare i tuoi preset in un file JSON portabile.
+- Clicca su "Importa preset" (o da menu File -> "Importa Preset...") per caricare preset JSON creati su altri computer o da backup.
+- Disponibile anche da riga di comando con `--export-presets [file.json]` e `--import-presets <file.json>`.
+
 PRESET DI SISTEMA DISPONIBILI:
 - Separazione Vocali: Divide Base e Voce, poi divide la Voce in Lead e Backing.
 - De-Reverb Vocali: Estrae le voci ed elimina riverberi ed echi.
 - Ultimate Stem (7 Tracce): Estrazione di Voci e Base, e divisione della Base 
   in 5 stem (Basso, Batteria, Pianoforte, Chitarra, Altro) + file Extra.
-- Ultimate Stems + Drum Split: Preset a 4 passi che estrae Lead, Backing, Base, 
-  Basso, Piano, Chitarra e divide la batteria in componenti (Kick, Snare, ecc.).
+- Ultimate Stems + Drum Split: Preset a 5 passi che estrae Base Strumentale 
+  completa (_Instrumental), Archi (_Strings), Lead Vocals, Backing Vocals, 
+  Basso, Piano, Chitarra, Altro e divide la batteria nei singoli componenti 
+  (Kick, Snare, Hi-Hat, Cymbals, Toms, ecc.).
 - Estrazione Chitarra: Preset ottimizzato per isolare le chitarre.
 - Separazione Uomo/Donna: Divide la traccia vocale in voce maschile e femminile.
 - Restauro Live: Estrae gli applausi e pulisce la performance sul palco.
@@ -99,8 +113,8 @@ PRESET DI SISTEMA DISPONIBILI:
 -------------------------------------------------------------------------------
 - Usa sottocartella: Crea una cartella col nome del brano. Consigliato per 
   tenere in ordine i file generati.
-- Elimina stem silenziosi: Se attivo, cancella gli stem con volume inferiore a 
-  -50 dB (essenzialmente silenzio).
+- Elimina stem silenziosi: Se attivo, cancella gli stem con volume inferiore alla 
+  soglia configurabile (da -20 dB a -80 dB a passi di 5 dB; predefinita a -50 dB).
 - Ascolta Stem: Clicca per riprodurre rapidamente uno stem nel lettore predefinito.
 
 7. CHUNKING (PREVENZIONE CRASH OUT-OF-MEMORY)
@@ -116,6 +130,58 @@ pulsanti "Sfoglia" e "Seleziona Cartella" come sorgente.
 9. NOTE TECNICHE E SUFFISSI
 -------------------------------------------------------------------------------
 I file di output avranno suffissi chiari come:
-_Vocals, _Instrumental, _Lead, _Backing, _DeReverb, _Other, _Extra, _Drums, _No_Drums.
+- `_Vocals.wav`
+- `_Instrumental.wav`
+- `_Dry.wav` / `_No_Dry.wav`
+- `_Drums.wav` / `_Bass.wav` / `_Other.wav`
+
+10. GUIDA ALLA RIGA DI COMANDO (CLI)
+-------------------------------------------------------------------------------
+A partire dalla versione 1.7, Music Separator include una completa interfaccia da
+riga di comando per automatizzare separazioni senza aprire l'interfaccia grafica.
+
+USO GENERALE:
+  music-separator -i <file_audio> [opzioni]
+
+PARAMETRI PRINCIPALI:
+  -i, --input <file...>       Uno o piu' file audio, cartelle o pattern glob (es. *.wav).
+  -o, --output-dir <cartella> Cartella di output dove salvare gli stem (default: ./output).
+  -m, --model <nome_modello>  Nome, alias o nome parziale del modello (non richiede estensioni come .ckpt/.onnx, es. "Viperx-1297" o "Inst_HQ_5").
+  -p, --preset <nome_preset>  Nome o chiave di un preset (es. preset_vocal_split o "Denoise + Vocals").
+  -r, --recursive             Scansiona le sottocartelle in modo ricorsivo quando l'input e' una cartella.
+  --format {WAV,FLAC,MP3}     Formato audio di uscita (default: WAV).
+  --bit-depth {16,24,32}      Profondità in bit per WAV (16, 24, 32 Float) e FLAC (16, 24).
+  --bitrate {320k,256k,192k}  Bitrate per formato MP3 (default: 320k).
+  --gpu                       Forza l'accelerazione GPU (CUDA / Apple MPS).
+  --cpu                       Forza l'elaborazione CPU-only.
+  --no-subfolder              Salva direttamente nella cartella di output senza creare sottocartelle.
+  --clean-names               Rimuove i numeri iniziali di traccia dal nome della cartella.
+  --delete-silent-stems       Rimuove automaticamente gli stem che contengono solo silenzio.
+  --silent-stem-threshold <dB> Soglia in dB al di sotto della quale uno stem e' considerato silenzio (es. -50, -45, -60; default: -50 dB).
+  --chunk-duration <secondi>  Elabora l'audio a blocchi di N secondi (ottimo per file lunghi).
+  --preview {first,final}     Separa solo 30 secondi di anteprima (primi o ultimi 30s).
+  -l, --list-models           Elenca tutti i modelli del catalogo e il loro stato di download.
+  --list-presets              Elenca tutti i preset di sistema e personalizzati disponibili.
+  --download-model <modello>  Scarica un modello nel catalogo locale ed esce.
+  -q, --quiet                 Riduce l'output nel terminale (mostra solo errori e completamento).
+  -v, --version               Mostra la versione dell'applicazione ed esce.
+
+ESEMPI SU WINDOWS:
+  - Separazione con modello:
+    "Music separator.exe" -i canzone.wav -m "BS-Roformer-SW.ckpt" -o "./output"
+  - Separazione con preset:
+    "Music separator.exe" -i canzone.wav --preset "preset_vocal_split"
+  - Elaborazione di un'intera cartella (ricorsiva):
+    "Music separator.exe" -i "D:\Musica\Album" -r --preset "preset_vocal_split"
+  - Visualizzare modelli e preset:
+    "Music separator.exe" --list-models
+    "Music separator.exe" --list-presets
+
+ESEMPI SU macOS (TERMINAL):
+  - Esecuzione diretta dell'app:
+    "/Applications/Music Separator/Music separator.app/Contents/MacOS/Music separator" -i canzone.wav -m "BS-Roformer-SW.ckpt"
+  - Creazione di un alias rapido in ~/.zshrc:
+    alias music-separator='"/Applications/Music Separator/Music separator.app/Contents/MacOS/Music separator"'
+    music-separator -i canzone.wav --preset "preset_vocal_split"
 
 ===============================================================================

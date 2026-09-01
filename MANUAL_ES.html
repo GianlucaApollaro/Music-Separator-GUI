@@ -209,7 +209,7 @@
     <div class="container">
         <header>
             <h1>Music Separator</h1>
-            <p>Manual de Usuario - v1.6</p>
+            <p>Manual de Usuario - v1.7</p>
         </header>
 
         <div class="download-box">
@@ -222,7 +222,7 @@
             <h3>Índice de Contenidos</h3>
             <ul class="index-list">
                 <li><a href="#installation">1. Instalación</a></li>
-                <li><a href="#new-features">2. Novedades en la v1.6</a></li>
+                <li><a href="#new-features">2. Novedades en la v1.7</a></li>
                 <li><a href="#basic-usage">3. Uso Básico (Modelo Único)</a></li>
                 <li><a href="#ensemble">4. Native Ensemble</a></li>
                 <li><a href="#presets">5. Preajustes en Cadena y Personalizados</a></li>
@@ -230,6 +230,7 @@
                 <li><a href="#chunking">7. Segmentación (Prevención OOM)</a></li>
                 <li><a href="#batch">8. Procesamiento por Lotes</a></li>
                 <li><a href="#technical">9. Notas Técnicas y Sufijos</a></li>
+                <li><a href="#cli">10. Interfaz de Línea de Comandos (CLI)</a></li>
             </ul>
         </div>
 
@@ -255,7 +256,7 @@
                 <h3>macOS (Apple Silicon M1/M2/M3/M4)</h3>
                 <ol>
                     <li>Descargue el paquete de Mac en formato <code>.zip</code>.</li>
-                    <li>Extraiga el archivo y mueva la carpeta <code>Music separator.app</code> a su carpeta <code>/Applications</code> (Aplicaciones).</li>
+                    <li>Extraiga el archivo y mueva la carpeta resultante a su carpeta <code>/Applications</code> (ej. <code>/Applications/Music Separator/</code>).</li>
                     <li>Haga clic derecho en la aplicación y seleccione <strong>Abrir</strong> (solo es necesario en el primer inicio para omitir los controles de seguridad Apple Gatekeeper).</li>
                 </ol>
                 <p><strong>Nota:</strong> FFmpeg está incluido en el paquete. Si encuentra bloqueos de permisos, abra su Terminal y ejecute:</p>
@@ -264,18 +265,19 @@
         </section>
 
         <section id="new-features">
-            <h2>2. Novedades en la v1.6 <span class="badge">Nuevo</span></h2>
+            <h2>2. Novedades en la v1.7 <span class="badge">Nuevo</span></h2>
             <div class="card">
                 <ul>
-                    <li><strong>Preajustes Personalizables por el Usuario:</strong> Ahora puedes crear tus propios preajustes haciendo clic en el botón <strong>Crear preajuste</strong> junto al selector de preajustes. Soporta preajustes de modelo único o cadenas multipaso, renombramiento de salida y mezcla de pistas restantes. Los preajustes se guardan localmente en la carpeta del programa para una portabilidad total.</li>
-                    <li><strong>Agrupación de Modelos Descargados:</strong> Los modelos descargados localmente se agrupan automáticamente en una categoría dedicada (<em>"Modelos Descargados (Offline)"</em>) en la parte superior del selector de modelos, lo que permite un acceso rápido sin conexión y una gestión más sencilla.</li>
-                    <li><strong>Accesibilidad macOS VoiceOver:</strong> Se rediseñó el selector de modelos en macOS para utilizar controles de lista nativos, lo que lo hace completamente accesible para lectores de pantalla y VoiceOver.</li>
+                    <li><strong>Interfaz de Línea de Comandos (CLI / Headless):</strong> Ahora puedes ejecutar separaciones, lotes y preajustes directamente desde el terminal o consola de comandos, ideal para automatizaciones y entornos headless.</li>
+                    <li><strong>Selección de Profundidad de Bits y Bitrate:</strong> Soporte completo para exportaciones WAV en 16-bit, 24-bit y 32-bit Float, FLAC en 16-bit y 24-bit, y MP3 con tasa de bits configurable (320k, 256k, 192k, 128k) mediante un selector dinámico y accesible.</li>
+                    <li><strong>Refactorización de Parches de Runtime:</strong> Motor de parches completamente modular, evitando fugas de memoria y acumulación de wrappers entre ejecuciones consecutivas.</li>
+                    <li><strong>Mayor Eficiencia y Robustez:</strong> Escrituras atómicas de configuración, caché inteligente del catálogo y verificación estricta de descargas.</li>
                 </ul>
-                <p>Características anteriores en la versión v1.5:</p>
+                <p>Características anteriores en la versión v1.6:</p>
                 <ul>
-                    <li><strong>Activar Vista Previa:</strong> Procesa un fragmento de 30 segundos (primeros o últimos) en una carpeta dedicada llamada <code>previews</code>.</li>
-                    <li><strong>Soporte Bandit &amp; SCNet:</strong> Carga dinámica y simulación de dependencias para modelos ZFTurbo.</li>
-                    <li><strong>Auto-Updater:</strong> Comprobación automática de actualizaciones al iniciar o en el menú Ayuda.</li>
+                    <li><strong>Preajustes Personalizables:</strong> Cadenas multipaso guardadas de forma portátil en JSON.</li>
+                    <li><strong>Agrupación de Modelos Descargados (Offline).</strong></li>
+                    <li><strong>Accesibilidad VoiceOver nativa en macOS.</strong></li>
                 </ul>
             </div>
         </section>
@@ -293,7 +295,13 @@
                         <li>Los modelos descargados aparecen en la categoría especial <strong>"Modelos Descargados (Offline)"</strong> en la parte superior de la lista.</li>
                     </ul>
                 </li>
-                <li>Seleccione el formato de salida (WAV, FLAC o MP3 a 320kbps).</li>
+                <li>Seleccione el formato de salida (WAV, FLAC o MP3) y la calidad/resolución deseada:
+                    <ul>
+                        <li><strong>WAV:</strong> 16-bit, 24-bit o 32-bit Float (calidad de estudio).</li>
+                        <li><strong>FLAC:</strong> 16-bit o 24-bit (sin pérdida en alta resolución).</li>
+                        <li><strong>MP3:</strong> 320 kbps, 256 kbps, 192 kbps o 128 kbps.</li>
+                    </ul>
+                </li>
                 <li>Haga clic en <strong>Iniciar Separación</strong>.</li>
             </ol>
         </section>
@@ -326,12 +334,21 @@
             </div>
 
             <div class="card">
+                <h3>Importar y Exportar Preajustes</h3>
+                <ul>
+                    <li><strong>Exportar:</strong> Haz clic en el botón <strong>Exportar preajustes</strong> o desde el menú <em>Archivo &rarr; Exportar Preajustes...</em> para guardar todos tus preajustes personalizados en un archivo JSON portátil.</li>
+                    <li><strong>Importar:</strong> Haz clic en <strong>Importar preajustes</strong> o desde el menú <em>Archivo &rarr; Importar Preajustes...</em> para cargar preajustes JSON creados en otras máquinas o desde copias de seguridad.</li>
+                    <li><strong>Desde la Línea de Comandos (CLI):</strong> Usa las opciones <code>--export-presets [archivo.json]</code> e <code>--import-presets &lt;archivo.json&gt;</code>.</li>
+                </ul>
+            </div>
+
+            <div class="card">
                 <h3>Preajustes de Sistema Incluidos</h3>
                 <ul>
                     <li><strong>Separación Vocal:</strong> Separa instrumental y voces, luego divide la pista vocal en voz principal (Lead) y coros (Backing).</li>
                     <li><strong>De-Reverb Vocal:</strong> Extrae voces y elimina automáticamente el eco y la reverberación para un sonido seco.</li>
                     <li><strong>Stems Definitivos (7 Pistas):</strong> Extrae voces e instrumental, luego divide el instrumental en Bajo, Batería, Piano, Guitarra y Otros + archivo Extra.</li>
-                    <li><strong>Ultimate Stems + Drum Split:</strong> Esegue la extracción de Lead vocals, Backing vocals, Bajo, Piano, Guitarra y divide la batería en componentes individuales (Bombo, Caja, Platos, Tom, etc., para más de 10 pistas en total).</li>
+                    <li><strong>Ultimate Stems + Drum Split:</strong> Motor de 5 pasos que extrae el Instrumental completo (<code>_Instrumental</code> con cuerdas incluidas), aísla Cuerdas (<code>_Strings</code>), Lead vocals, Backing vocals, Bajo, Piano, Guitarra, Otros instrumentos y divide la batería en componentes individuales (Bombo, Caja, Platos, Tom, etc., para un total de 15 pistas aisladas).</li>
                     <li><strong>Extracción de Guitarra:</strong> Preajuste optimizado para aislar guitarras acústicas y eléctricas.</li>
                     <li><strong>Separación Hombre/Mujer:</strong> Divide la pista vocal en voz masculina y femenina.</li>
                     <li><strong>Restauración de Vivo:</strong> Aísla los aplausos y el ruido del público, dejando limpia la interpretación musical.</li>
@@ -346,7 +363,7 @@
             <h2>6. Opciones de Salida y Limpieza</h2>
             <ul>
                 <li><strong>Usar subcarpeta:</strong> Si está activo, crea una subcarpeta con el nombre de la canción. Recomendado para mantener ordenados los outputs de preajustes o ensemble.</li>
-                <li><strong>Eliminar stems silenciosos:</strong> Elimina automáticamente los stems generados si están por debajo de -50 dB (silencio).</li>
+                <li><strong>Eliminar stems silenciosos:</strong> Elimina automáticamente los stems generados si están por debajo del umbral configurado (-20 dB a -80 dB en pasos de 5 dB; por defecto: -50 dB).</li>
                 <li><strong>Reproducir Stem:</strong> Haz clic para escuchar al instante cualquier stem generado en el reproductor multimedia predeterminado del sistema.</li>
             </ul>
         </section>
@@ -386,6 +403,56 @@
                 <li><code>_Piano</code>: Piano acústico o teclados.</li>
                 <li><code>_Other</code> / <code>_Extra</code>: Sintetizadores y elementos no categorizados.</li>
             </ul>
+        </section>
+
+        <section id="cli">
+            <h2>10. Interfaz de Línea de Comandos (CLI / Modo Headless) <span class="badge">v1.7</span></h2>
+            <div class="card">
+                <p>A partir de la versión 1.7, Music Separator incluye una completa interfaz de línea de comandos para automatizar separaciones sin abrir la interfaz gráfica.</p>
+                
+                <h3>Parámetros Principales</h3>
+                <ul>
+                    <li><code>-i, --input &lt;archivos...&gt;</code>: Archivo(s) de audio, carpeta o patrón glob (ej. <code>*.wav</code>).</li>
+                    <li><code>-o, --output-dir &lt;dir&gt;</code>: Carpeta de salida (por defecto: <code>./output</code>).</li>
+                    <li><code>-m, --model &lt;nombre&gt;</code>: Nombre descriptivo, alias o fragmento del modelo (no requiere extensiones como <code>.ckpt</code> o <code>.onnx</code>, ej. <code>"Viperx-1297"</code> o <code>"Inst_HQ_5"</code>).</li>
+                    <li><code>-p, --preset &lt;nombre&gt;</code>: Preajuste de sistema o personalizado (ej. <code>preset_vocal_split</code> o <code>"Denoise + Vocals"</code>).</li>
+                    <li><code>-r, --recursive</code>: Escanea subcarpetas recursivamente cuando la entrada es una carpeta.</li>
+                    <li><code>--format {WAV,FLAC,MP3}</code>: Formato de audio de salida (por defecto: <code>WAV</code>).</li>
+                    <li><code>--bit-depth {16,24,32}</code>: Profundidad de bits para WAV (16, 24, 32 Float) y FLAC (16, 24).</li>
+                    <li><code>--bitrate {320k,256k,192k}</code>: Tasa de bits para formato MP3 (por defecto: 320k).</li>
+                    <li><code>--gpu / --cpu</code>: Fuerza la aceleración GPU (CUDA/MPS) o CPU.</li>
+                    <li><code>--no-subfolder</code>: Guarda directamente en la carpeta sin crear subcarpetas por tema.</li>
+                    <li><code>--clean-names</code>: Elimina los números iniciales de pista de los nombres de carpeta.</li>
+                    <li><code>--delete-silent-stems</code>: Elimina automáticamente los stems que contengan solo silencio.</li>
+                    <li><code>--silent-stem-threshold &lt;dB&gt;</code>: Umbral en dB por debajo del cual un stem se considera silencio (por defecto: <code>-50 dB</code>).</li>
+                    <li><code>--chunk-duration &lt;seg&gt;</code>: Procesa el audio en bloques de N segundos.</li>
+                    <li><code>-l, --list-models</code>: Lista todos los modelos y su estado de descarga.</li>
+                    <li><code>--list-presets</code>: Lista todos los preajustes de sistema y personalizados.</li>
+                    <li><code>--download-model &lt;nombre&gt;</code>: Descarga un modelo al catálogo local y sale.</li>
+                </ul>
+
+                <h3>Ejemplos en Windows</h3>
+                <pre># Separación con modelo
+"Music separator.exe" -i cancion.wav -m "BS-Roformer-SW.ckpt" -o "./output"
+
+# Separación con preajuste
+"Music separator.exe" -i cancion.wav --preset "preset_vocal_split"
+
+# Carpeta completa en modo recursivo
+"Music separator.exe" -i "D:\Musica\Album" -r --preset "preset_vocal_split"
+
+# Inspección de catálogo
+"Music separator.exe" --list-models
+"Music separator.exe" --list-presets</pre>
+
+                <h3>Ejemplos en macOS (Terminal)</h3>
+                <pre># Ejecución directa desde el paquete .app
+"/Applications/Music Separator/Music separator.app/Contents/MacOS/Music separator" -i cancion.wav -m "BS-Roformer-SW.ckpt"
+
+# Crear alias rápido en ~/.zshrc
+alias music-separator='"/Applications/Music Separator/Music separator.app/Contents/MacOS/Music separator"'
+music-separator -i cancion.wav --preset "preset_vocal_split"</pre>
+            </div>
         </section>
     </div>
 </body>

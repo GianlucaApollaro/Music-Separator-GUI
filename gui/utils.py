@@ -85,6 +85,18 @@ def download_file(url,
     if os.path.exists(dest_path) and not overwrite:
         return True
 
+    # Download to a .part file and rename only on success: a partial file left at
+    # dest_path would pass the os.path.exists() check above on the next run and be
+    # loaded as a valid (but truncated) model.
+    part_path = f"{dest_path}.part"
+
+    def _cleanup_part():
+        try:
+            if os.path.exists(part_path):
+                os.remove(part_path)
+        except OSError:
+            pass
+
     try:
         response = requests.get(url, stream=True, timeout=timeout)
         response.raise_for_status()
@@ -93,16 +105,37 @@ def download_file(url,
         dest_dir = os.path.dirname(dest_path)
         if dest_dir:
             os.makedirs(dest_dir, exist_ok=True)
-        with open(dest_path, 'wb') as f:
+
+        downloaded = 0
+        with open(part_path, 'wb') as f:
             if total_size == 0:
-                f.write(response.content)
+                content = response.content
+                downloaded = len(content)
+                f.write(content)
             else:
-                downloaded = 0
                 for chunk in response.iter_content(chunk_size=8192):
+                    if not chunk:
+                        continue
                     downloaded += len(chunk)
                     f.write(chunk)
                     if progress_callback:
                         progress_callback(downloaded, total_size)
+            f.flush()
+            os.fsync(f.fileno())
+
+        # A dropped connection ends iter_content without raising: verify the size.
+        # If the server uses Content-Encoding (e.g. gzip), content-length represents
+        # compressed bytes while iter_content yields decompressed bytes.
+        is_compressed = response.headers.get('Content-Encoding') in ('gzip', 'deflate', 'br', 'zstd')
+        if total_size and not is_compressed and downloaded < total_size:
+            logger.error(
+                f"Download incompleto per {os.path.basename(dest_path)}: "
+                f"{downloaded}/{total_size} byte"
+            )
+            _cleanup_part()
+            return False
+
+        os.replace(part_path, dest_path)
         return True
     except requests.exceptions.Timeout:
         logger.error(f"Timeout durante download {url}")
@@ -110,6 +143,5 @@ def download_file(url,
         logger.error(f"Errore di connessione per {url}")
     except Exception as e:
         logger.error(f"Download fallito: {e}")
-        if os.path.exists(dest_path):
-            os.remove(dest_path)
+    _cleanup_part()
     return False

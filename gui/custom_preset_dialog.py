@@ -527,4 +527,12 @@ class CustomPresetDialog(wx.Dialog):
                 
         # Save preset via manager
         self.preset_key = PresetManager.save_custom_preset(name, config)
+        if not self.preset_key:
+            # Writing to disk failed: keep the dialog open instead of pretending success.
+            wx.MessageBox(
+                self.i18n.tr("preset_save_failed"),
+                self.i18n.tr("msg_error"),
+                wx.OK | wx.ICON_ERROR
+            )
+            return
         self.EndModal(wx.ID_OK)

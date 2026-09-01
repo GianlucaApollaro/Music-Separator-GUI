@@ -1,8 +1,11 @@
 # Virtual Environment
 venv/
 venv_cpu/
+venv_cpu_MiniPC/
 .venv/
 env/
+install_cpu - mini.bat
+temp_models/
 
 # Python cache
 __pycache__/
@@ -45,6 +48,8 @@ Log.txt
 *.log
 [Ee]rror.txt
 config.json
+custom_presets.json
+PATCHES_REFACTOR*.md
 
 # Binaries
 ffmpeg_bin/

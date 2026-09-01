@@ -33,9 +33,18 @@ macOS (Apple Silicon M1/M2/M3/M4):
 - Command-Line Interface (CLI / Headless): You can now use Music Separator directly
   from the terminal or command prompt for automated pipelines, DAW scripts, and
   headless servers without launching the graphical user interface.
+- Preset Import and Export: Easily backup, share, and restore your custom presets
+  via JSON files directly from the GUI or the command line.
+- 5-Pass Ultimate Stems + Drum Split Preset: Advanced automated pipeline that extracts
+  15 isolated tracks (including Bowed Strings, lead/backing vocals, bass, guitar,
+  piano, and full drum kit separation) with a calibrated full instrumental mix.
+- New Specialized AI Models: Integrated Bowed Strings BS-Roformer, Male/Female Vocal
+  Duet MelBand Roformer, and Lead Synth BS-Roformer models.
+- MVSep Mega 53 Stems Model Support: Isolate up to 53 individual musical instruments in a single pass.
 - Audio Bit Depth & Bitrate Selection: Full support for 16-bit, 24-bit, and 32-bit
   Float exports for WAV, 16-bit and 24-bit for FLAC, and custom bitrates
   (320k, 256k, 192k, 128k) for MP3 via an accessible dynamic selector.
+- Configurable Silent Stem Threshold: Custom silence threshold from -20 dB down to -80 dB.
 - Runtime Monkey-Patches Refactoring: Brand-new modular runtime engine preventing
   memory leaks and avoiding wrapper stacking across consecutive runs.
 - Enhanced Efficiency & Robustness: Atomic file configuration writes, smart model

@@ -34,9 +34,18 @@ macOS (Apple Silicon M1/M2/M3/M4):
 - Interfaz de Línea de Comandos (CLI / Headless): Ahora puedes utilizar Music Separator
   directamente desde el terminal o consola de comandos, ideal para automatizaciones,
   scripts y DAWs sin necesidad de abrir la interfaz gráfica.
+- Importación y Exportación de Preajustes: Guarda, comparte y restaura fácilmente tus
+  preajustes personalizados mediante archivos JSON, tanto desde la interfaz gráfica como por CLI.
+- Preajuste Ultimate Stems + Drum Split (5 Pasos): Extracción automatizada avanzada de 15 pistas
+  aisladas (incluyendo cuerdas BowedStrings, lead/backing vocals, bajo, guitarra, piano y división
+  completa de batería) con reconstrucción calibrada de la pista instrumental completa.
+- Nuevos Modelos de IA Especializados: Integración de modelos para cuerdas (Bowed Strings BS-Roformer),
+  separación de duetos hombre/mujer (MelBand Roformer) y sintetizadores (Lead Synth BS-Roformer).
+- Soporte para Modelo MVSep Mega (53 Stems): Aislamiento de hasta 53 instrumentos en una sola pasada.
 - Selección de Profundidad de Bits y Bitrate: Soporte completo para exportaciones
   en 16-bit, 24-bit y 32-bit Float para WAV, 16-bit y 24-bit para FLAC, y tasa de bits
   personalizada (320k, 256k, 192k, 128k) para MP3 mediante un selector dinámico accesible.
+- Umbral de Stems Silenciosos Configurable: Selector de -20 dB a -80 dB para eliminación automática.
 - Refactorización de Parches de Runtime: Motor de parches completamente modular,
   evitando fugas de memoria y acumulación de wrappers entre ejecuciones consecutivas.
 - Mayor Eficiencia y Robustez: Escrituras atómicas de configuración, caché inteligente

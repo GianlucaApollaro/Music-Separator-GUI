@@ -266,6 +266,7 @@ class MainWindow(wx.Frame):
         # Check GPU availability asynchronously: importing torch synchronously in
         # InitUI would freeze the window for seconds at startup.
         self.chk_gpu.SetValue(False)
+        self.chk_gpu.SetToolTip(i18n.tr("gpu_tooltip"))
         threading.Thread(target=self._check_gpu_async, daemon=True).start()
             
         hbox4.Add(self.chk_gpu)
@@ -550,13 +551,9 @@ class MainWindow(wx.Frame):
         self.cb_model.SetToolTip(i18n.tr("model_tooltip"))
         self.cb_model.UpdateSearchLabel()
         self.cb_model_2.UpdateSearchLabel()
-        if self.chk_gpu.IsEnabled():
-            # Only if it was MPS
-            import torch
-            if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available() and not torch.cuda.is_available():
-                self.chk_gpu.SetToolTip(i18n.tr("gpu_mps_tooltip"))
-        else:
-            self.chk_gpu.SetToolTip(i18n.tr("gpu_not_available_tooltip"))
+        self.chk_gpu.SetToolTip(i18n.tr(
+            "gpu_tooltip" if self.chk_gpu.IsEnabled() else "gpu_not_available_tooltip"
+        ))
         
         self.st_preset.SetLabel(i18n.tr("preset_label"))
         if hasattr(self, "btn_add_preset") and self.btn_add_preset:
@@ -870,6 +867,9 @@ class MainWindow(wx.Frame):
 
     def _apply_gpu_state(self, has_gpu):
         try:
+            self.chk_gpu.SetToolTip(i18n.tr(
+                "gpu_tooltip" if has_gpu else "gpu_not_available_tooltip"
+            ))
             if has_gpu:
                 self.chk_gpu.SetValue(True)
             else:

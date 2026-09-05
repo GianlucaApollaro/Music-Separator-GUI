@@ -1,5 +1,6 @@
 wxpython
 audio-separator
+audioread
 onnxruntime
 requests
 packaging

@@ -1,3 +1,11 @@
+import multiprocessing
+
+if __name__ == '__main__':
+    # PyInstaller workers and resource trackers re-enter this executable.
+    # Dispatch them before GUI/audio imports or CLI argument handling, on all
+    # platforms (including macOS), so they do not launch another app instance.
+    multiprocessing.freeze_support()
+
 import sys
 import os
 import subprocess

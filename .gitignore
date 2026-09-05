@@ -1,5 +1,7 @@
 # Virtual Environment
 venv/
+venv_mac/
+.venv-python/
 venv_cpu/
 venv_cpu_MiniPC/
 .venv/

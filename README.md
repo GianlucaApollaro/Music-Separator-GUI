@@ -19,7 +19,7 @@ Whether you need to isolate vocals for karaoke, extract instrumentals for remixe
   - Custom output rename suffixes and selective stem discarding via a checklist grid.
   - Save configurations locally in the program root for absolute portability.
 - **Native Ensemble Mode**: Merge the outputs of two different models (using algorithms like `avg_wave`, `min_wave`, `max_wave`, or `median_wave`) for cleaner stems.
-- **Performance & Out-of-Memory Prevention**: Built-in GPU acceleration support (CUDA on Windows, MPS on Apple Silicon) and **Chunking** option to process long tracks without crashes.
+- **Performance & Out-of-Memory Prevention**: Built-in GPU acceleration support (CUDA on Windows/Linux, MPS for PyTorch models and CoreML for supported ONNX models on Apple Silicon) and **Chunking** option to process long tracks without crashes. Uncheck **Use GPU (CUDA / Apple Silicon) if available** to force CPU processing.
 - **Batch Processing**: Drag & drop multiple audio files or entire folders to process them in batch mode.
 - **Fully Accessible UI**: Designed with native OS widgets ensuring compatibility with screen readers (NVDA on Windows, VoiceOver on macOS).
 - **Multilingual Support**: Available in **English**, **Italian**, and **Spanish**.

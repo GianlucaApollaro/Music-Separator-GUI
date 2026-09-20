@@ -268,6 +268,7 @@
             <h2>2. What's New in v1.8 <span class="badge">New</span></h2>
             <div class="card">
                 <ul>
+                    <li><strong>AIFF &amp; Apple Lossless (ALAC) Formats Support:</strong> Full support for opening and batch-processing <code>.aiff</code> and <code>.aif</code> audio files, plus high-fidelity export options in uncompressed AIFF (16-bit, 24-bit, 32-bit Float) and compressed Apple Lossless ALAC (16-bit and 24-bit in <code>.m4a</code> container), perfectly tailored for Logic Pro, Final Cut, and Apple ecosystems.</li>
                     <li><strong>Branched &amp; Tree-Structured Custom Presets (Fork / Tree Pipelines):</strong> Custom presets now support non-linear chains. Starting from step 2, you can select any stem generated in earlier passes or the original input as your audio source, stop a branch with <em>"None (end of this branch)"</em>, and independently save and rename stems produced at any step.</li>
                     <li><strong>Enhanced VoiceOver Accessibility on macOS:</strong> Replaced all fixed dropdown controls with native <code>wx.Choice</code> (<code>NSPopUpButton</code>) widgets for seamless screen reader navigation.</li>
                     <li><strong>Automatic Model Name Resolution:</strong> Fixed unsupported model file errors when creating custom presets from descriptive catalog titles.</li>
@@ -288,7 +289,7 @@
             <h2>3. Basic Usage (Single Model)</h2>
             <p>To start a classic separation with a single model:</p>
             <ol>
-                <li>Drag and drop or browse your input file in the <strong>Input Audio File</strong> field.</li>
+                <li>Drag and drop or browse your input file (WAV, FLAC, MP3, AIFF, MP4, MKV, etc.) in the <strong>Input Audio File</strong> field.</li>
                 <li>Select an <strong>Output Directory</strong>.</li>
                 <li>Click on the <strong>Model</strong> field to select a model.
                     <ul>
@@ -297,10 +298,12 @@
                         <li>Locally downloaded models appear in the special category <strong>"Downloaded Models (Offline)"</strong> at the top of the list.</li>
                     </ul>
                 </li>
-                <li>Select the output format (WAV, FLAC, or MP3) and the target quality/resolution:
+                <li>Select the output format (WAV, FLAC, MP3, AIFF, or ALAC) and the target quality/resolution:
                     <ul>
                         <li><strong>WAV:</strong> 16-bit, 24-bit, or 32-bit Float (studio quality).</li>
                         <li><strong>FLAC:</strong> 16-bit or 24-bit (high-resolution lossless).</li>
+                        <li><strong>AIFF:</strong> 16-bit, 24-bit, or 32-bit Float (professional uncompressed audio standard).</li>
+                        <li><strong>ALAC:</strong> 16-bit or 24-bit (Apple Lossless compressed in <code>.m4a</code> container).</li>
                         <li><strong>MP3:</strong> 320 kbps, 256 kbps, 192 kbps, or 128 kbps.</li>
                     </ul>
                 </li>
@@ -425,8 +428,8 @@
                     <li><code>-m, --model &lt;name&gt;</code>: Model friendly name, alias, or substring (does not require <code>.ckpt</code> or <code>.onnx</code> extensions, e.g. <code>"Viperx-1297"</code> or <code>"Inst_HQ_5"</code>).</li>
                     <li><code>-p, --preset &lt;name&gt;</code>: Built-in or custom preset name (e.g. <code>preset_vocal_split</code> or <code>"Denoise + Vocals"</code>).</li>
                     <li><code>-r, --recursive</code>: Recursively scan subfolders when input is a directory.</li>
-                    <li><code>--format {WAV,FLAC,MP3}</code>: Output format (default: <code>WAV</code>).</li>
-                    <li><code>--bit-depth {16,24,32}</code>: Bit depth for WAV (16, 24, 32 Float) and FLAC (16, 24).</li>
+                    <li><code>--format {WAV,FLAC,MP3,AIFF,ALAC}</code>: Output format (default: <code>WAV</code>).</li>
+                    <li><code>--bit-depth {16,24,32}</code>: Bit depth for WAV/AIFF (16, 24, 32 Float) and FLAC/ALAC (16, 24).</li>
                     <li><code>--bitrate {320k,256k,192k}</code>: Bitrate for MP3 format (default: 320k).</li>
                     <li><code>--gpu / --cpu</code>: Force GPU acceleration (CUDA/MPS) or CPU execution.</li>
                     <li><code>--no-subfolder</code>: Save stems directly in output folder without per-song subdirectories.</li>

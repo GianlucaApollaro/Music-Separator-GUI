@@ -397,3 +397,72 @@ class PresetManager:
         except Exception as e:
             logger.error(f"Error importing presets: {e}")
             return (0, [], str(e))
+
+    @classmethod
+    def validate_preset_suffixes(cls, config: dict) -> list:
+        """
+        Verifica se la configurazione del preset contiene suffissi di output duplicati
+        tra stem o passaggi diversi, che potrebbero causare collisioni.
+        Restituisce l'elenco dei suffissi duplicati trovati.
+        """
+        if not isinstance(config, dict):
+            return []
+
+        seen_suffixes = {}
+        duplicates = []
+
+        def check_suffix(s: str, source_desc: str):
+            if not s or not isinstance(s, str):
+                return
+            cleaned = s.strip().lower().lstrip('_')
+            if not cleaned:
+                return
+            if cleaned in seen_suffixes:
+                if s.strip() not in duplicates:
+                    duplicates.append(s.strip())
+            else:
+                seen_suffixes[cleaned] = source_desc
+
+        ptype = config.get("type", "chain")
+        if ptype == "single":
+            rmap = config.get("rename_map", {})
+            if isinstance(rmap, dict):
+                for stem, sfx in rmap.items():
+                    if sfx:
+                        check_suffix(sfx, f"stem '{stem}'")
+            mix_rem = config.get("mix_remaining_to")
+            if mix_rem:
+                check_suffix(mix_rem, "mix_remaining_to")
+        else:
+            step_idx = 1
+            while True:
+                m_key = f"model_{step_idx}"
+                if m_key not in config:
+                    break
+
+                k1 = config.get(f"m{step_idx}_keep_name")
+                if k1:
+                    check_suffix(k1, f"pass {step_idx} keep_name")
+                k2 = config.get(f"m{step_idx}_keep_pass_stem_name")
+                if k2:
+                    check_suffix(k2, f"pass {step_idx} keep_pass_stem_name")
+
+                rmap = config.get(f"m{step_idx}_rename_map")
+                if isinstance(rmap, dict):
+                    for stem, sfx in rmap.items():
+                        if sfx:
+                            check_suffix(sfx, f"pass {step_idx} stem '{stem}'")
+                step_idx += 1
+
+            post_mix = config.get("post_mix", [])
+            if isinstance(post_mix, list):
+                for pm in post_mix:
+                    if isinstance(pm, dict):
+                        pm_out = pm.get("output")
+                        if pm_out:
+                            check_suffix(pm_out, "post_mix output")
+
+        return duplicates
+
+def validate_preset_suffixes(config: dict) -> list:
+    return PresetManager.validate_preset_suffixes(config)

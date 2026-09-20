@@ -568,7 +568,7 @@ class ModelManager:
 
         return all(fname in local_files for fname in files_to_download.keys())
 
-    def resolve_and_download(self, model_name: str, logger_callback: Callable[[str], None], progress_callback: Callable[[float, float], None]) -> Optional[str]:
+    def resolve_and_download(self, model_name: str, logger_callback: Callable[[str], None], progress_callback: Callable[[float, float], None], stop_event: Optional[threading.Event] = None) -> Optional[str]:
         files_to_download = {}
         target_model_filename = model_name
 
@@ -588,12 +588,20 @@ class ModelManager:
 
         downloaded_files = []
         try:
+            if stop_event and stop_event.is_set():
+                return None
+
             logger_callback(f"Checking models: {model_name}\n")
             for fname, url in files_to_download.items():
+                if stop_event and stop_event.is_set():
+                    return None
+
                 dest_path = os.path.join(self.models_dir, fname)
                 if not os.path.exists(dest_path):
                     logger_callback(f"Downloading {fname}...\n")
-                    if not download_file(url, dest_path, progress_callback, timeout=(15, 60)):
+                    if not download_file(url, dest_path, progress_callback, timeout=(15, 60), stop_event=stop_event):
+                        if stop_event and stop_event.is_set():
+                            return None
                         raise Exception(f"Failed to download {fname}")
                     downloaded_files.append(dest_path)
                     self._invalidate_model_files_cache()

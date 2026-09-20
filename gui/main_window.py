@@ -26,6 +26,7 @@ class MainWindow(wx.Frame):
         self.display_to_file: dict = {}
         self.file_to_display: dict = {}
         self.model_list: list = []
+        self._cancel_event = threading.Event()
 
         self.InitUI()
         self.InitMenu()
@@ -355,10 +356,10 @@ class MainWindow(wx.Frame):
         self.st_format = wx.StaticText(self.panel, label=i18n.tr("output_format"))
         hbox_format.Add(self.st_format, flag=wx.RIGHT|wx.ALIGN_CENTER_VERTICAL, border=5)
         if sys.platform == 'darwin':
-            self.cb_format = wx.Choice(self.panel, choices=['WAV', 'FLAC', 'MP3'])
+            self.cb_format = wx.Choice(self.panel, choices=['WAV', 'FLAC', 'MP3', 'AIFF', 'ALAC'])
             self.cb_format.Bind(wx.EVT_CHOICE, self.OnFormatChanged)
         else:
-            self.cb_format = wx.ComboBox(self.panel, choices=['WAV', 'FLAC', 'MP3'], style=wx.CB_DROPDOWN | wx.CB_READONLY)
+            self.cb_format = wx.ComboBox(self.panel, choices=['WAV', 'FLAC', 'MP3', 'AIFF', 'ALAC'], style=wx.CB_DROPDOWN | wx.CB_READONLY)
             self.cb_format.Bind(wx.EVT_COMBOBOX, self.OnFormatChanged)
         self.cb_format.SetName(i18n.tr("output_format"))
         self.cb_format.SetStringSelection(config.get("output_format", 'WAV'))
@@ -477,8 +478,12 @@ class MainWindow(wx.Frame):
         val = self.cb_quality.GetStringSelection()
         if fmt == "WAV":
             config.set("wav_bit_depth", val)
+        elif fmt == "AIFF":
+            config.set("aiff_bit_depth", val)
         elif fmt == "FLAC":
             config.set("flac_bit_depth", val)
+        elif fmt == "ALAC":
+            config.set("alac_bit_depth", val)
         elif fmt == "MP3":
             config.set("mp3_bitrate", val)
 
@@ -496,12 +501,32 @@ class MainWindow(wx.Frame):
                 self.cb_quality.SetStringSelection(saved)
             else:
                 self.cb_quality.SetSelection(1)
+        elif fmt == "AIFF":
+            self.st_quality.SetLabel(i18n.tr("bit_depth_label"))
+            self.cb_quality.SetName(i18n.tr("bit_depth_name_aiff"))
+            choices = ["16-bit", "24-bit", "32-bit Float"]
+            self.cb_quality.Append(choices)
+            saved = config.get("aiff_bit_depth", "24-bit")
+            if saved in choices:
+                self.cb_quality.SetStringSelection(saved)
+            else:
+                self.cb_quality.SetSelection(1)
         elif fmt == "FLAC":
             self.st_quality.SetLabel(i18n.tr("bit_depth_label"))
             self.cb_quality.SetName(i18n.tr("bit_depth_name_flac"))
             choices = ["16-bit", "24-bit"]
             self.cb_quality.Append(choices)
             saved = config.get("flac_bit_depth", "24-bit")
+            if saved in choices:
+                self.cb_quality.SetStringSelection(saved)
+            else:
+                self.cb_quality.SetSelection(1)
+        elif fmt == "ALAC":
+            self.st_quality.SetLabel(i18n.tr("bit_depth_label"))
+            self.cb_quality.SetName(i18n.tr("bit_depth_name_alac"))
+            choices = ["16-bit", "24-bit"]
+            self.cb_quality.Append(choices)
+            saved = config.get("alac_bit_depth", "24-bit")
             if saved in choices:
                 self.cb_quality.SetStringSelection(saved)
             else:
@@ -620,7 +645,7 @@ class MainWindow(wx.Frame):
         updater.check_for_updates(self, show_up_to_date=True, silent=False)
 
     def OnBrowseInput(self, event):
-        with wx.FileDialog(self, i18n.tr("open_media_files"), wildcard="Media files (*.mp3;*.wav;*.flac;*.m4a;*.mp4;*.mkv)|*.mp3;*.wav;*.flac;*.m4a;*.mp4;*.mkv",
+        with wx.FileDialog(self, i18n.tr("open_media_files"), wildcard="Media files (*.mp3;*.wav;*.flac;*.m4a;*.aiff;*.aif;*.mp4;*.mkv)|*.mp3;*.wav;*.flac;*.m4a;*.aiff;*.aif;*.mp4;*.mkv|All files (*.*)|*.*",
                            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE) as fileDialog:
             if fileDialog.ShowModal() == wx.ID_CANCEL:
                 return
@@ -633,7 +658,7 @@ class MainWindow(wx.Frame):
             if dirDialog.ShowModal() == wx.ID_CANCEL:
                 return
             folder_path = dirDialog.GetPath()
-            valid_exts = ['.wav', '.mp3', '.flac', '.ogg', '.m4a', '.mp4', '.mkv']
+            valid_exts = ['.wav', '.mp3', '.flac', '.ogg', '.m4a', '.aiff', '.aif', '.mp4', '.mkv']
             audio_files = []
             for root, dirs, files in os.walk(folder_path):
                 for f in files:
@@ -662,17 +687,25 @@ class MainWindow(wx.Frame):
         self.worker = None
         self.btn_start.Enable()
         self.btn_stop.Disable()
-        self.gauge.SetValue(100)
         # Store output files and enable Play button if we have results
         if event.output_files:
             self.last_output_files = event.output_files
             self.btn_play_stem.Enable()
-        if event.success:
+
+        status = getattr(event, "status", "success" if event.success else "error")
+        if status == "cancelled" or (not event.success and self._cancel_event.is_set()):
+            wx.MessageBox(
+                event.message or i18n.tr("msg_cancelled"),
+                i18n.tr("msg_cancelled_title") or i18n.tr("app_title"),
+                wx.OK | wx.ICON_INFORMATION
+            )
+        elif event.success:
+            self.gauge.SetValue(100)
             # Rebuild model categories dynamically to include any newly downloaded model
             self._populate_model_combobox()
             wx.MessageBox(i18n.tr("msg_success"), i18n.tr("msg_success_title"), wx.OK | wx.ICON_INFORMATION)
         else:
-            wx.MessageBox(i18n.tr("msg_error"), i18n.tr("msg_error_title"), wx.OK | wx.ICON_ERROR)
+            wx.MessageBox(event.message or i18n.tr("msg_error"), i18n.tr("msg_error_title"), wx.OK | wx.ICON_ERROR)
 
     def OnStart(self, event):
         input_string = self.tc_input.GetValue()
@@ -697,7 +730,9 @@ class MainWindow(wx.Frame):
             "enable_ensemble": self.chk_ensemble.GetValue(),
             "output_format": out_format,
             "wav_bit_depth": quality_val if out_format == "WAV" else config.get("wav_bit_depth", "24-bit"),
+            "aiff_bit_depth": quality_val if out_format == "AIFF" else config.get("aiff_bit_depth", "24-bit"),
             "flac_bit_depth": quality_val if out_format == "FLAC" else config.get("flac_bit_depth", "24-bit"),
+            "alac_bit_depth": quality_val if out_format == "ALAC" else config.get("alac_bit_depth", "24-bit"),
             "mp3_bitrate": quality_val if out_format == "MP3" else config.get("mp3_bitrate", "320 kbps"),
             "remove_leading_numbers": self.chk_remove_numbers.GetValue(),
             "use_subfolder": self.chk_use_subfolder.GetValue(),
@@ -766,17 +801,26 @@ class MainWindow(wx.Frame):
             wx.CallAfter(self.btn_start.Enable)
             wx.CallAfter(self.btn_stop.Disable)
 
+        self._cancel_event.clear()
+
         def _download_and_launch():
             """Background thread: resolves/downloads models, then starts SeparationThread."""
             if preset_config:
                 resolved_models = []
                 step_idx = 1
                 while True:
+                    if self._cancel_event.is_set():
+                        wx.CallAfter(self.tc_log.AppendText, (i18n.tr("msg_cancelled") or "Cancelled.") + "\n")
+                        _abort()
+                        return
+
                     m_key = f"model_{step_idx}"
                     if m_key not in preset_config:
                         break
-                    m_val = self.model_manager.resolve_and_download(preset_config[m_key], logger_cb, progress_cb)
-                    if not m_val:
+                    m_val = self.model_manager.resolve_and_download(preset_config[m_key], logger_cb, progress_cb, stop_event=self._cancel_event)
+                    if not m_val or self._cancel_event.is_set():
+                        if self._cancel_event.is_set():
+                            wx.CallAfter(self.tc_log.AppendText, (i18n.tr("msg_cancelled") or "Cancelled.") + "\n")
                         _abort()
                         return
                     resolved_models.append(m_val)
@@ -788,10 +832,12 @@ class MainWindow(wx.Frame):
                 m4 = resolved_models[3] if len(resolved_models) > 3 else None
                 m5 = resolved_models[4] if len(resolved_models) > 4 else None
 
-                bit_depth = quality_val if out_format in ("WAV", "FLAC") else None
+                bit_depth = quality_val if out_format in ("WAV", "FLAC", "AIFF", "ALAC") else None
                 bitrate = quality_val if out_format == "MP3" else None
 
                 def _start_preset():
+                    if self._cancel_event.is_set():
+                        return
                     self.worker = SeparationThread(
                         self, input_files, output_dir, m1, use_gpu, out_format,
                         m2, m3, m4, m5, preset_config, chunk_duration=chunk_duration,
@@ -809,24 +855,35 @@ class MainWindow(wx.Frame):
                 return
 
             # Standard or ensemble
-            m1 = self.model_manager.resolve_and_download(model_name, logger_cb, progress_cb)
-            if not m1:
+            if self._cancel_event.is_set():
+                wx.CallAfter(self.tc_log.AppendText, (i18n.tr("msg_cancelled") or "Cancelled.") + "\n")
+                _abort()
+                return
+
+            m1 = self.model_manager.resolve_and_download(model_name, logger_cb, progress_cb, stop_event=self._cancel_event)
+            if not m1 or self._cancel_event.is_set():
+                if self._cancel_event.is_set():
+                    wx.CallAfter(self.tc_log.AppendText, (i18n.tr("msg_cancelled") or "Cancelled.") + "\n")
                 _abort()
                 return
 
             m2 = None
             algo = "avg_wave"
             if use_ensemble:
-                m2 = self.model_manager.resolve_and_download(model_name_2, logger_cb, progress_cb)
-                if not m2:
+                m2 = self.model_manager.resolve_and_download(model_name_2, logger_cb, progress_cb, stop_event=self._cancel_event)
+                if not m2 or self._cancel_event.is_set():
+                    if self._cancel_event.is_set():
+                        wx.CallAfter(self.tc_log.AppendText, (i18n.tr("msg_cancelled") or "Cancelled.") + "\n")
                     _abort()
                     return
                 algo = ensemble_algorithm
 
-            bit_depth = quality_val if out_format in ("WAV", "FLAC") else None
+            bit_depth = quality_val if out_format in ("WAV", "FLAC", "AIFF", "ALAC") else None
             bitrate = quality_val if out_format == "MP3" else None
 
             def _start_standard():
+                if self._cancel_event.is_set():
+                    return
                 self.worker = SeparationThread(
                     self, input_files, output_dir, m1, use_gpu, out_format,
                     m2, ensemble_algorithm=algo, chunk_duration=chunk_duration,
@@ -846,9 +903,10 @@ class MainWindow(wx.Frame):
         self._download_thread.start()
 
     def OnStop(self, event):
+        self._cancel_event.set()
         if self.worker:
             self.worker.stop()
-            self.tc_log.AppendText(i18n.tr("msg_stopping") + "\n")
+        self.tc_log.AppendText(i18n.tr("msg_stopping") + "\n")
 
     def OnPlayStem(self, event):
         if not self.last_output_files:

@@ -31,6 +31,9 @@ macOS (Apple Silicon M1/M2/M3/M4):
 
 2. NOVITÀ nella v1.8
 -------------------------------------------------------------------------------
+- Supporto Formati Audio AIFF e ALAC (Apple Lossless):
+  * Apertura e scansione batch di file .aiff e .aif sia da GUI che da riga di comando.
+  * Esportazione nei formati AIFF (16-bit, 24-bit, 32-bit Float) e ALAC Apple Lossless in contenitore .m4a (16-bit e 24-bit), garantendo la massima fedelta' audio e la perfetta integrazione con l'ecosistema Apple e professionale.
 - Preset Personalizzati con Catene Ramificate (Flussi ad Albero / Fork):
   Ora i preset personalizzati possono gestire flussi non-lineari. A partire dal
   2° passo puoi scegliere qualsiasi stem dei passi precedenti (o l'audio originale)
@@ -79,15 +82,17 @@ NOVITÀ nella v1.5:
 
 3. USO BASE (MODELLO SINGOLO)
 -------------------------------------------------------------------------------
-1. Trascina o seleziona il tuo file audio (WAV, FLAC, MP3, MP4, MKV, ecc.).
+1. Trascina o seleziona il tuo file audio (WAV, FLAC, MP3, AIFF, MP4, MKV, ecc.).
 2. Scegli una Cartella di Output.
 3. Seleziona un Modello dal selettore.
    - Su Windows/Linux, i modelli sono mostrati in un albero con barra di ricerca.
    - Su macOS, sono mostrati in una ListBox nativa e accessibile.
    - I modelli scaricati compaiono in cima sotto "Modelli Scaricati (Offline)".
-4. Seleziona il formato di uscita (WAV, FLAC o MP3) e la relativa qualità:
+4. Seleziona il formato di uscita (WAV, FLAC, MP3, AIFF o ALAC) e la relativa qualità:
    - Per WAV: 16-bit, 24-bit o 32-bit Float (qualità studio).
    - Per FLAC: 16-bit o 24-bit (lossless ad alta risoluzione).
+   - Per AIFF: 16-bit, 24-bit o 32-bit Float (standard non compresso per audio professionale).
+   - Per ALAC: 16-bit o 24-bit (Apple Lossless compresso in contenitore .m4a).
    - Per MP3: 320 kbps, 256 kbps, 192 kbps o 128 kbps.
 5. Clicca su "Avvia Separazione".
 
@@ -179,8 +184,8 @@ PARAMETRI PRINCIPALI:
   -m, --model <nome_modello>  Nome, alias o nome parziale del modello (non richiede estensioni come .ckpt/.onnx, es. "Viperx-1297" o "Inst_HQ_5").
   -p, --preset <nome_preset>  Nome o chiave di un preset (es. preset_vocal_split o "Denoise + Vocals").
   -r, --recursive             Scansiona le sottocartelle in modo ricorsivo quando l'input e' una cartella.
-  --format {WAV,FLAC,MP3}     Formato audio di uscita (default: WAV).
-  --bit-depth {16,24,32}      Profondità in bit per WAV (16, 24, 32 Float) e FLAC (16, 24).
+  --format {WAV,FLAC,MP3,AIFF,ALAC} Formato audio di uscita (default: WAV).
+  --bit-depth {16,24,32}      Profondità in bit per WAV/AIFF (16, 24, 32 Float) e FLAC/ALAC (16, 24).
   --bitrate {320k,256k,192k}  Bitrate per formato MP3 (default: 320k).
   --gpu                       Forza l'accelerazione GPU (CUDA / Apple MPS).
   --cpu                       Forza l'elaborazione CPU-only.

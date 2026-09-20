@@ -51,6 +51,8 @@ Log.txt
 [Ee]rror.txt
 config.json
 custom_presets.json
+bugs.md
+tests/
 PATCHES_REFACTOR*.md
 
 # Binaries
@@ -61,6 +63,7 @@ ffmpeg_Mac_bin/
 # Temporary and Release files
 *.7z
 *.zip
+Music_Separator_GUI_*
 Mac/
 refactor.py
 release_notes_*.md

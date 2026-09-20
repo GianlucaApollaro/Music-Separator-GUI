@@ -160,8 +160,40 @@ def stem_from_filename(filename: str) -> str:
         
     return stem
 
+def resample_audio(audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
+    """
+    Ricampiona un array audio (1D o 2D) da orig_sr a target_sr con precisione float32.
+    Utilizza scipy.signal.resample_poly se disponibile, con fallback a interpolazione numpy.
+    """
+    if orig_sr == target_sr or len(audio) == 0:
+        return audio.astype(np.float32) if audio.dtype != np.float32 else audio
+
+    try:
+        import math
+        import scipy.signal as signal
+        g = math.gcd(int(target_sr), int(orig_sr))
+        up = int(target_sr) // g
+        down = int(orig_sr) // g
+        resampled = signal.resample_poly(audio, up, down, axis=0)
+        return resampled.astype(np.float32)
+    except Exception as e:
+        logger.warning(f"scipy resample_poly unavailable or failed ({e}), falling back to linear interpolation")
+        num_samples = int(round(len(audio) * float(target_sr) / float(orig_sr)))
+        indices = np.linspace(0, len(audio) - 1, num_samples)
+        if audio.ndim == 1:
+            return np.interp(indices, np.arange(len(audio)), audio).astype(np.float32)
+        else:
+            cols = [np.interp(indices, np.arange(len(audio)), audio[:, ch]) for ch in range(audio.shape[1])]
+            return np.column_stack(cols).astype(np.float32)
+
 def blend_audio(audio1: np.ndarray, audio2: np.ndarray, algorithm: str = "avg_wave") -> np.ndarray:
-    """Combina due array audio usando min_wave, max_wave, median_wave o avg_wave."""
+    """Combina due array audio usando min_wave, max_wave, median_wave o avg_wave, con allineamento canali."""
+    # Allineamento canali mono / stereo
+    if audio1.ndim == 2 and audio2.ndim == 1:
+        audio2 = np.tile(audio2[:, None], (1, audio1.shape[1]))
+    elif audio1.ndim == 1 and audio2.ndim == 2:
+        audio1 = np.tile(audio1[:, None], (1, audio2.shape[1]))
+
     min_len = min(len(audio1), len(audio2))
     a = audio1[:min_len]
     b = audio2[:min_len]
@@ -176,25 +208,27 @@ def blend_audio(audio1: np.ndarray, audio2: np.ndarray, algorithm: str = "avg_wa
         return (a + b) / 2.0
 
 def read_audio_pair(path1: str, path2: str) -> Tuple[np.ndarray, int, np.ndarray]:
-    """Legge due file audio, restituisce (data1, samplerate, data2)."""
-    data1, sr1 = sf.read(path1)
-    data2, sr2 = sf.read(path2)
+    """Legge due file audio, ricampiona automaticamente se le frequenze differiscono, e restituisce (data1, samplerate, data2)."""
+    data1, sr1 = sf.read(path1, dtype='float32')
+    data2, sr2 = sf.read(path2, dtype='float32')
     if sr1 != sr2:
-        raise ValueError(f"Samplerate mismatch: {sr1} vs {sr2}")
+        data2 = resample_audio(data2, sr2, sr1)
     return data1, sr1, data2
 
-def get_audio_volume_stats(fpath: str) -> Tuple[float, float]:
+def get_audio_volume_stats(fpath: str) -> Tuple[Optional[float], Optional[float]]:
     """
     Calcola il picco massimo (dBFS) e l'energia media RMS (dBFS) di un file audio.
     Utilizza soundfile con lettura a blocchi di 64k frame (zero sovraccarico RAM).
     Se soundfile fallisce per codec non supportati nativamente, ripiega su FFmpeg volumedetect.
-    Restituisce (peak_db, rms_db).
+    Restituisce (peak_db, rms_db) oppure (None, None) se il file non esiste o l'analisi fallisce.
     """
     if not os.path.exists(fpath):
-        return -120.0, -120.0
+        return None, None
 
     try:
         with sf.SoundFile(fpath) as audio:
+            if audio.frames == 0:
+                return -120.0, -120.0
             peak_val = 0.0
             sum_sq = 0.0
             total_samples = 0
@@ -222,11 +256,83 @@ def get_audio_volume_stats(fpath: str) -> Tuple[float, float]:
                  os.devnull if os.name != 'nt' else 'NUL'],
                 capture_output=True, text=True, errors='replace'
             )
+            if vol_res.returncode != 0:
+                logger.warning(f"FFmpeg volumedetect failed for {fpath} with returncode {vol_res.returncode}")
+                return None, None
             peak_m = re.search(r'max_volume:\s*([-\d.]+)\s*dB', vol_res.stderr)
             mean_m = re.search(r'mean_volume:\s*([-\d.]+)\s*dB', vol_res.stderr)
+            if not peak_m and not mean_m:
+                logger.warning(f"FFmpeg volumedetect could not parse volume stats for {fpath}")
+                return None, None
             peak_db = float(peak_m.group(1)) if peak_m else -120.0
             rms_db = float(mean_m.group(1)) if mean_m else -120.0
             return peak_db, rms_db
-        except Exception:
-            return -120.0, -120.0
+        except Exception as ffmpeg_err:
+            logger.warning(f"Failed to analyze volume for {fpath}: {ffmpeg_err}")
+            return None, None
+
+def is_audio_silent(fpath: str, threshold_db: float) -> Tuple[bool, Optional[float], Optional[float]]:
+    """
+    Determina se un file audio è da considerarsi silenzioso.
+    Restituisce (is_silent, peak_db, rms_db).
+    Se l'analisi fallisce (es. file non leggibile o corrotto), is_silent è SEMPRE False per sicurezza.
+    """
+    peak_db, rms_db = get_audio_volume_stats(fpath)
+    if peak_db is None or rms_db is None:
+        # Errore di lettura: preservare SEMPRE il file, mai cancellare
+        return False, None, None
+
+    # Un file è silenzioso se l'intero file non supera mai la soglia (nessun picco sopra threshold)
+    # E l'energia RMS è anch'essa al di sotto della soglia.
+    if peak_db < threshold_db and rms_db < threshold_db:
+        return True, peak_db, rms_db
+
+    # Gestione specifica di artefatti transitori isolati (es. singolo click/pop a -45dB in uno stem vuoto con soglia a -50dB):
+    # Il picco supera di poco la soglia (< threshold + 6 dB), MA l'RMS medio è profondamente nel rumore (< threshold - 25 dB).
+    # Se il picco supera (threshold + 6 dB) (es. -44 dB o più forte), è da considerarsi segnale utile e NON viene eliminato.
+    if peak_db < (threshold_db + 6.0) and rms_db < (threshold_db - 25.0):
+        return True, peak_db, rms_db
+
+    return False, peak_db, rms_db
+
+def get_unique_path(target_path: str, reserved_paths: Optional[set] = None) -> str:
+    """
+    Restituisce un percorso univoco che non collide con file/cartelle esistenti su disco
+    né con percorsi già prenotati in reserved_paths.
+    Se target_path esiste già o è in reserved_paths, aggiunge un suffisso ' (1)', ' (2)', ecc.
+    Gestisce correttamente la case-insensitivity su Windows e macOS.
+    """
+    target_path = os.path.abspath(target_path)
+    parent_dir, filename = os.path.split(target_path)
+    base, ext = os.path.splitext(filename)
+
+    match = re.search(r'^(.*?)\s*\((\d+)\)$', base)
+    if match:
+        stem_base = match.group(1).rstrip()
+        counter = int(match.group(2))
+    else:
+        stem_base = base
+        counter = 1
+
+    def is_occupied(p: str) -> bool:
+        if os.path.exists(p):
+            return True
+        if reserved_paths:
+            norm_p = os.path.normcase(os.path.abspath(p))
+            for r in reserved_paths:
+                if os.path.normcase(os.path.abspath(r)) == norm_p:
+                    return True
+        return False
+
+    candidate = target_path
+    if not is_occupied(candidate):
+        return candidate
+
+    while True:
+        candidate_filename = f"{stem_base} ({counter}){ext}"
+        candidate = os.path.join(parent_dir, candidate_filename)
+        if not is_occupied(candidate):
+            return candidate
+        counter += 1
+
 

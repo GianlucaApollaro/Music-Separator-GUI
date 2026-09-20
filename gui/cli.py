@@ -253,8 +253,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ensemble-algo", choices=["avg_wave", "median_wave", "min_wave", "max_wave"], default="avg_wave", help="Ensemble algorithm when multiple models are selected (default: avg_wave)")
 
     # Audio & Hardware Execution Settings
-    parser.add_argument("--format", choices=["WAV", "FLAC", "MP3"], default="WAV", help="Output audio format (default: WAV)")
-    parser.add_argument("--bit-depth", choices=["16", "24", "32", "16-bit", "24-bit", "32-bit Float"], default="24-bit", help="Bit depth for WAV and FLAC (default: 24-bit)")
+    parser.add_argument("--format", choices=["WAV", "FLAC", "MP3", "AIFF", "ALAC"], default="WAV", help="Output audio format (default: WAV)")
+    parser.add_argument("--bit-depth", choices=["16", "24", "32", "16-bit", "24-bit", "32-bit Float"], default="24-bit", help="Bit depth for WAV, FLAC, AIFF, and ALAC (default: 24-bit)")
     parser.add_argument("--bitrate", choices=["320k", "256k", "192k", "128k", "320", "256", "192", "128", "320 kbps", "256 kbps", "192 kbps", "128 kbps"], default="320k", help="Bitrate for MP3 (default: 320k)")
     parser.add_argument("--gpu", action="store_true", default=None, help="Force GPU acceleration (CUDA on Windows/Linux, MPS on Apple Silicon)")
     parser.add_argument("--cpu", action="store_true", default=None, help="Force CPU-only processing")

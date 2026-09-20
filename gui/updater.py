@@ -268,13 +268,16 @@ def _apply_update_and_exit(parent, archive_path):
         update_bat_path = os.path.join(temp_dir, f"update_{pid}.bat")
 
         # Create batch script that handles both flat archives and archives nested inside a single root folder.
-        # It also deletes the old _internal folder (compiled libraries) to ensure clean libraries upgrade.
-        # Every destructive step only runs after the previous one verified success, otherwise the
-        # update is aborted and the (still working) previous version is relaunched.
+        # Implements B01: staging backup, xcopy error check, integrity verification, and automatic rollback.
         bat_content = f"""@echo off
 set "UPDATER_LOG=%TEMP%\\ms_update_{pid}.log"
+set "EXTRACT_DIR=%TEMP%\\ms_update_{pid}"
+set "EXE_BACKUP_READY=0"
+set "INTERNAL_BACKUP_READY=0"
+set "FF_BACKUP_READY=0"
 echo [%date% %time%] Update started > "%UPDATER_LOG%"
 copy /y "{original_7z_path}" "%TEMP%\\7za_temp_updater.exe" >nul
+if errorlevel 1 goto :fail
 if not exist "%TEMP%\\7za_temp_updater.exe" (
     echo [%date% %time%] ERROR: failed to copy 7za.exe >> "%UPDATER_LOG%"
     goto :fail
@@ -285,38 +288,135 @@ if not errorlevel 1 (
     ping -n 2 127.0.0.1 >nul
     goto wait_loop
 )
-if exist "%TEMP%\\ms_update_temp" rmdir /s /q "%TEMP%\\ms_update_temp"
-"%TEMP%\\7za_temp_updater.exe" x "{archive_path}" -o"%TEMP%\\ms_update_temp" -y >> "%UPDATER_LOG%" 2>&1
+
+if exist "%EXTRACT_DIR%" rmdir /s /q "%EXTRACT_DIR%"
+"%TEMP%\\7za_temp_updater.exe" x "{archive_path}" -o"%EXTRACT_DIR%" -y >> "%UPDATER_LOG%" 2>&1
 if errorlevel 1 (
     echo [%date% %time%] ERROR: extraction failed >> "%UPDATER_LOG%"
     goto :fail
 )
-if exist "{app_dir}\\_internal" rmdir /s /q "{app_dir}\\_internal"
-set "SRC_DIR=%TEMP%\\ms_update_temp"
+
+set "SRC_DIR=%EXTRACT_DIR%"
 set "DIR_COUNT=0"
 set "FILE_COUNT=0"
 set "SINGLE_DIR="
-for /d %%i in ("%TEMP%\\ms_update_temp\\*") do (
+for /d %%i in ("%EXTRACT_DIR%\\*") do (
     set /a DIR_COUNT+=1
     set "SINGLE_DIR=%%i"
 )
-for %%i in ("%TEMP%\\ms_update_temp\\*") do (
+for %%i in ("%EXTRACT_DIR%\\*") do (
     set /a FILE_COUNT+=1
 )
 if %DIR_COUNT%==1 if %FILE_COUNT%==0 set "SRC_DIR=%SINGLE_DIR%"
-xcopy "%SRC_DIR%\\*" "{app_dir}" /s /e /y /h /r >nul
-rmdir /s /q "%TEMP%\\ms_update_temp" >nul 2>&1
+
+rem --- Verify extracted structure before touching existing installation ---
+if not exist "%SRC_DIR%\\{os.path.basename(exe_path)}" goto :fail
+if not exist "%SRC_DIR%\\_internal" goto :fail
+
+rem --- Backup existing components (executable, _internal, ffmpeg_bin) before replacement ---
+rem Never overwrite recovery files from an earlier failed update.
+if exist "{exe_path}.bak" goto :recovery_required
+if exist "{exe_path}.bak.part" goto :recovery_required
+if exist "{app_dir}\\_internal_backup" goto :recovery_required
+if exist "{app_dir}\\ffmpeg_bin_backup" goto :recovery_required
+if not exist "{exe_path}" goto :fail
+copy /y "{exe_path}" "{exe_path}.bak.part" >nul
+if errorlevel 1 goto :backup_failed
+fc /b "{exe_path}" "{exe_path}.bak.part" >nul
+if errorlevel 1 goto :backup_failed
+move /y "{exe_path}.bak.part" "{exe_path}.bak" >nul
+if errorlevel 1 goto :backup_failed
+set "EXE_BACKUP_READY=1"
+:skip_exe_backup
+
+if not exist "{app_dir}\\_internal" goto :skip_backup
+move "{app_dir}\\_internal" "{app_dir}\\_internal_backup" >nul
+if errorlevel 1 (
+    echo [%date% %time%] ERROR: failed to backup _internal folder >> "%UPDATER_LOG%"
+    goto :rollback
+)
+set "INTERNAL_BACKUP_READY=1"
+:skip_backup
+
+if not exist "{app_dir}\\ffmpeg_bin" goto :skip_ff_backup
+move "{app_dir}\\ffmpeg_bin" "{app_dir}\\ffmpeg_bin_backup" >nul
+if errorlevel 1 (
+    echo [%date% %time%] ERROR: failed to backup ffmpeg_bin folder >> "%UPDATER_LOG%"
+    goto :rollback
+)
+set "FF_BACKUP_READY=1"
+:skip_ff_backup
+
+rem --- Copy new files into app_dir ---
+xcopy "%SRC_DIR%\\*" "{app_dir}" /s /e /y /h /r >> "%UPDATER_LOG%" 2>&1
+if errorlevel 1 (
+    echo [%date% %time%] ERROR: xcopy failed with errorlevel %errorlevel% >> "%UPDATER_LOG%"
+    goto :rollback
+)
+
+rem --- Verify that essential files exist after copying ---
+if not exist "{exe_path}" goto :rollback
+if not exist "{app_dir}\\_internal" goto :rollback
+
+rem --- Success: clean up backups and temporary extraction folder ---
+echo [%date% %time%] Update verified successfully. >> "%UPDATER_LOG%"
+if exist "{exe_path}.bak" del "{exe_path}.bak" >nul 2>&1
+if exist "{app_dir}\\_internal_backup" rmdir /s /q "{app_dir}\\_internal_backup" >nul 2>&1
+if exist "{app_dir}\\ffmpeg_bin_backup" rmdir /s /q "{app_dir}\\ffmpeg_bin_backup" >nul 2>&1
+rmdir /s /q "%EXTRACT_DIR%" >nul 2>&1
 echo [%date% %time%] Update OK, restarting >> "%UPDATER_LOG%"
 start "" "{exe_path}"
 del "%TEMP%\\7za_temp_updater.exe" >nul 2>&1
-del "%~f0"
+rem Keep the small script beside its log for diagnostics; do not delete while executing.
 exit /b 0
-:fail
-echo [%date% %time%] Update ABORTED, previous version untouched >> "%UPDATER_LOG%"
+
+:rollback
+echo [%date% %time%] Performing rollback to previous version >> "%UPDATER_LOG%"
+if not "%EXE_BACKUP_READY%"=="1" goto :rb_exe_done
+copy /y "{exe_path}.bak" "{exe_path}" >nul
+if errorlevel 1 goto :recovery_required
+fc /b "{exe_path}.bak" "{exe_path}" >nul
+if errorlevel 1 goto :recovery_required
+:rb_exe_done
+
+if not "%INTERNAL_BACKUP_READY%"=="1" goto :rb_internal_done
+if exist "{app_dir}\\_internal" rmdir /s /q "{app_dir}\\_internal"
+if exist "{app_dir}\\_internal" goto :recovery_required
+xcopy "{app_dir}\\_internal_backup\\*" "{app_dir}\\_internal\\" /s /e /i /y /h /r >nul
+if errorlevel 1 goto :recovery_required
+:rb_internal_done
+
+if not "%FF_BACKUP_READY%"=="1" goto :rb_ff_done
+if exist "{app_dir}\\ffmpeg_bin" rmdir /s /q "{app_dir}\\ffmpeg_bin"
+if exist "{app_dir}\\ffmpeg_bin" goto :recovery_required
+xcopy "{app_dir}\\ffmpeg_bin_backup\\*" "{app_dir}\\ffmpeg_bin\\" /s /e /i /y /h /r >nul
+if errorlevel 1 goto :recovery_required
+:rb_ff_done
+
+rem Remove backups only after ALL components have been restored successfully.
+if "%EXE_BACKUP_READY%"=="1" del "{exe_path}.bak" >nul 2>&1
+if "%INTERNAL_BACKUP_READY%"=="1" rmdir /s /q "{app_dir}\\_internal_backup" >nul 2>&1
+if "%FF_BACKUP_READY%"=="1" rmdir /s /q "{app_dir}\\ffmpeg_bin_backup" >nul 2>&1
+rmdir /s /q "%EXTRACT_DIR%" >nul 2>&1
+echo [%date% %time%] Rollback completed, restarting previous version >> "%UPDATER_LOG%"
 start "" "{exe_path}"
 del "%TEMP%\\7za_temp_updater.exe" >nul 2>&1
-del "%~f0"
 exit /b 1
+
+:fail
+echo [%date% %time%] Update ABORTED, restoring any backups >> "%UPDATER_LOG%"
+goto :rollback
+
+:backup_failed
+echo [%date% %time%] Backup failed verification; original installation unchanged >> "%UPDATER_LOG%"
+rem An incomplete .part file is never used for recovery.
+if exist "{exe_path}.bak.part" del "{exe_path}.bak.part" >nul 2>&1
+goto :fail
+
+:recovery_required
+echo [%date% %time%] ERROR: recovery required. Backups preserved in {app_dir} >> "%UPDATER_LOG%"
+rem Do not restart a potentially mixed installation or discard recovery data.
+exit /b 2
 """
         with open(update_bat_path, "w", encoding="ansi") as f:
             f.write(bat_content)
@@ -342,27 +442,80 @@ exit /b 1
 
         update_sh_path = os.path.join(temp_dir, f"update_{pid}.sh")
 
-        # Mac updater script unzips to a temporary folder, locates the .app bundle,
-        # deletes the old .app bundle completely (to avoid signature / stale file errors),
-        # and moves the new app bundle in its place.
+        # Mac updater script: unzips to a unique temp directory, verifies bundle structure,
+        # backs up the existing .app before replacement, and rolls back if replacement fails.
         sh_content = f"""#!/bin/bash
 while kill -0 {pid} 2>/dev/null; do
     sleep 1
 done
-rm -rf "/tmp/ms_update_temp"
-mkdir -p "/tmp/ms_update_temp"
-unzip -o "{archive_path}" -d "/tmp/ms_update_temp"
-EXTRACTED_APP=$(find "/tmp/ms_update_temp" -name "*.app" -type d -maxdepth 2 | head -n 1)
-if [ -n "$EXTRACTED_APP" ]; then
-    rm -rf "{app_bundle_path}"
-    mv "$EXTRACTED_APP" "{target_dir}/"
-else
-    # Fallback to direct unzip if structure is flat
-    unzip -o "{archive_path}" -d "{target_dir}"
+
+EXTRACT_DIR="/tmp/ms_update_{pid}"
+BACKUP_APP="{target_dir}/Music_separator_backup.app"
+
+rm -rf "$EXTRACT_DIR"
+mkdir -p "$EXTRACT_DIR"
+
+unzip -q -o "{archive_path}" -d "$EXTRACT_DIR"
+if [ $? -ne 0 ]; then
+    echo "Extraction failed"
+    rm -rf "$EXTRACT_DIR"
+    {app_relaunch_cmd}
+    rm "$0"
+    exit 1
 fi
-rm -rf "/tmp/ms_update_temp"
+
+EXTRACTED_APP=$(find "$EXTRACT_DIR" -name "*.app" -type d -maxdepth 2 | head -n 1)
+if [ -z "$EXTRACTED_APP" ] || [ ! -d "$EXTRACTED_APP" ]; then
+    echo "No valid .app found in archive"
+    rm -rf "$EXTRACT_DIR"
+    {app_relaunch_cmd}
+    rm "$0"
+    exit 1
+fi
+
+if [ ! -f "$EXTRACTED_APP/Contents/Info.plist" ] || [ ! -d "$EXTRACTED_APP/Contents/MacOS" ]; then
+    echo "Extracted .app structure invalid"
+    rm -rf "$EXTRACT_DIR"
+    {app_relaunch_cmd}
+    rm "$0"
+    exit 1
+fi
+
+# Backup existing app
+if [ -d "{app_bundle_path}" ]; then
+    rm -rf "$BACKUP_APP"
+    mv "{app_bundle_path}" "$BACKUP_APP"
+    if [ $? -ne 0 ]; then
+        echo "Failed to backup existing app"
+        rm -rf "$EXTRACT_DIR"
+        {app_relaunch_cmd}
+        rm "$0"
+        exit 1
+    fi
+fi
+
+# Move new app to target dir
+mv "$EXTRACTED_APP" "{target_dir}/"
+MOVE_STATUS=$?
+
+if [ $MOVE_STATUS -ne 0 ] || [ ! -d "{app_bundle_path}" ]; then
+    echo "Installation failed, rolling back"
+    if [ -d "$BACKUP_APP" ]; then
+        rm -rf "{app_bundle_path}"
+        mv "$BACKUP_APP" "{app_bundle_path}"
+    fi
+    rm -rf "$EXTRACT_DIR"
+    {app_relaunch_cmd}
+    rm "$0"
+    exit 1
+fi
+
+# Success: remove backup and temp
+rm -rf "$BACKUP_APP"
+rm -rf "$EXTRACT_DIR"
 {app_relaunch_cmd}
 rm "$0"
+exit 0
 """
         with open(update_sh_path, "w", encoding="utf-8") as f:
             f.write(sh_content)

@@ -33,6 +33,8 @@
     "bitrate_label": "Bitrate:",
     "bit_depth_name_wav": "Bit depth for WAV format",
     "bit_depth_name_flac": "Bit depth for FLAC format",
+    "bit_depth_name_aiff": "Bit depth for AIFF format",
+    "bit_depth_name_alac": "Bit depth for ALAC format",
     "bitrate_name_mp3": "Bitrate for MP3 format",
     "status_converting": "Converting {file} to {format}...",
     "enable_ensemble": "Enable Ensemble (Multi-Model Fusion)",
@@ -82,6 +84,7 @@
     "stem_play_no_files": "No output files available. Run a separation first.",
     "status_silent_stem_deleted": "[Silent Stem Cleanup] Deleted '{file}' (Peak: {peak:.1f} dB, RMS: {rms:.1f} dB < Threshold: {threshold:.1f} dB)",
     "status_silent_stem_kept": "[Silent Stem Cleanup] Kept '{file}' (Peak: {peak:.1f} dB, RMS: {rms:.1f} dB >= Threshold: {threshold:.1f} dB)",
+    "status_silent_stem_error": "[Silent Stem Cleanup] Unable to analyze volume for '{file}': file kept for safety",
     "status_normalizing": "Normalizing input audio to -0.1 dBFS...",
     "model_search": "Search:",
     "category_downloaded": "Downloaded Models (Offline)",
@@ -160,7 +163,13 @@
     "preset_import_success": "Successfully imported {count} preset(s):\n{names}",
     "preset_export_none": "No custom presets available to export.",
     "preset_import_error": "Error importing presets:\n{error}",
-    "preset_import_invalid": "The selected file does not contain valid presets.",
     "menu_import_preset": "Import Presets...",
-    "menu_export_preset": "Export Presets..."
+    "menu_export_preset": "Export Presets...",
+    "msg_warning": "Warning",
+    "preset_warn_duplicate_suffixes": "Warning: this preset contains duplicate output suffixes ({suffixes}). Files with the same name will be numbered to prevent overwriting. Do you want to continue anyway?",
+    "status_renamed_collision": "Destination already exists: saved as '{file}' to prevent overwriting.",
+    "status_folder_collision": "Folder '{folder}' already exists with contents: outputs redirected to '{new_folder}'.",
+    "msg_cancelled": "Separation cancelled by user.",
+    "msg_cancelled_title": "Cancelled",
+    "status_cancelled": "Processing cancelled. Completed files: {count}/{total}"
 }

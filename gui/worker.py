@@ -11,18 +11,23 @@ import uuid
 import traceback
 import soundfile as sf
 import numpy as np
+import time
 from audio_separator.separator import Separator
 from gui.i18n_manager import i18n
-from gui.audio_utils import stem_from_filename, blend_audio, get_model_stems, stems_are_equivalent, get_rename_suffix, get_audio_volume_stats
+from gui.audio_utils import stem_from_filename, blend_audio, get_model_stems, stems_are_equivalent, get_rename_suffix, get_audio_volume_stats, is_audio_silent, resample_audio, get_unique_path
+from gui.utils import cleanup_dead_sessions
 
 class TqdmCaptureStream:
-    def __init__(self, notify_func, original_stream):
+    def __init__(self, notify_func, original_stream, check_stop_func=None):
         self.notify_func = notify_func
         self.original_stream = original_stream
+        self.check_stop_func = check_stop_func
         self.prog_regex = re.compile(r"(\d+)%\|")
         self.last_val = -1
         
     def write(self, buf):
+        if self.check_stop_func and self.check_stop_func():
+            raise KeyboardInterrupt("Stopped by user")
         if self.original_stream:
             try:
                 self.original_stream.write(buf)
@@ -94,6 +99,7 @@ class SeparationThread(threading.Thread):
         self._stop_event = threading.Event()
         self.all_output_files = []  # accumulates absolute paths of all generated stems
         self._temp_dirs = []  # temp dirs created during separation, cleaned in run()'s finally
+        self._session_temp_dir = None  # unique session temp directory for intermediate files (B07)
 
         if self.enable_preview:
             parent_dir = os.path.dirname(self.output_dir)
@@ -104,6 +110,24 @@ class SeparationThread(threading.Thread):
 
     def run(self):
         try:
+            # Create a dedicated session temp directory for all intermediates associated with current PID (B07)
+            my_pid = os.getpid()
+            self._session_temp_dir = tempfile.mkdtemp(prefix=f"poluvr_session_pid{my_pid}_")
+
+            # Write PID metadata inside session directory for cross-process activity verification
+            try:
+                pid_file = os.path.join(self._session_temp_dir, "session.pid")
+                with open(pid_file, "w") as pf:
+                    pf.write(f"{my_pid}\n{time.time()}\n")
+            except Exception:
+                pass
+
+            # Clean up stale session directories left by previous dead processes
+            try:
+                cleanup_dead_sessions(tempfile.gettempdir(), self._session_temp_dir)
+            except Exception:
+                pass
+
             # GPU/CPU enforcement logic
             old_cuda_env = os.environ.get('CUDA_VISIBLE_DEVICES')
             if not self.use_gpu:
@@ -127,7 +151,7 @@ class SeparationThread(threading.Thread):
             while logger.handlers:
                 logger.removeHandler(logger.handlers[0])
             
-            handler = GuiLogHandler(notify_func=self.post_log)
+            handler = GuiLogHandler(check_stop_func=lambda: self._stop_event.is_set(), notify_func=self.post_log)
             formatter = logging.Formatter('%(message)s [%(asctime)s - %(levelname)s]', datefmt='%Y-%m-%d %H:%M:%S')
             handler.setFormatter(formatter)
             logger.addHandler(handler)
@@ -150,7 +174,8 @@ class SeparationThread(threading.Thread):
                 log_level=logging.INFO,
                 model_file_dir=model_dir,
                 output_dir=self.output_dir,
-                chunk_duration=self.chunk_duration
+                chunk_duration=self.chunk_duration,
+                use_soundfile=True
             )
 
             # --- RUNTIME LIBRARY PATCH (MONKEY-PATCH) ---
@@ -164,6 +189,76 @@ class SeparationThread(threading.Thread):
                 self.post_log(i18n.tr("log_patch_failed", error=patch_err))
             # --- END OF PATCHES ---
 
+            # --- B02: Pre-allocate unique output folders and prefixes for the entire batch ---
+            # Guarantees that songs with colliding base names (or with remove_leading_numbers active)
+            # do not overwrite each other or overwrite non-empty folders from previous runs.
+            batch_dest_map = {}
+            reserved_batch_targets = set()
+
+            for input_file in self.input_files:
+                base_in = os.path.splitext(os.path.basename(input_file))[0]
+                fn = base_in
+                if self.remove_leading_numbers:
+                    fn_stripped = re.sub(r"^\d+[\s.\-_]+", "", base_in)
+                    if fn_stripped:
+                        fn = fn_stripped
+
+                if self.use_subfolder:
+                    target_dir = os.path.join(self.output_dir, fn)
+                    norm_dir = os.path.normcase(os.path.abspath(target_dir))
+                    is_colliding = (norm_dir in reserved_batch_targets)
+                    if not is_colliding and os.path.exists(target_dir):
+                        try:
+                            if len(os.listdir(target_dir)) > 0:
+                                is_colliding = True
+                        except OSError:
+                            is_colliding = True
+
+                    if is_colliding:
+                        counter = 2
+                        m = re.search(r'^(.*?)\s*\((\d+)\)$', fn)
+                        fn_base = m.group(1).rstrip() if m else fn
+                        if m:
+                            counter = int(m.group(2)) + 1
+                        while True:
+                            cand_fn = f"{fn_base} ({counter})"
+                            cand_dir = os.path.join(self.output_dir, cand_fn)
+                            cand_norm = os.path.normcase(os.path.abspath(cand_dir))
+                            cand_coll = (cand_norm in reserved_batch_targets)
+                            if not cand_coll and os.path.exists(cand_dir):
+                                try:
+                                    if len(os.listdir(cand_dir)) > 0:
+                                        cand_coll = True
+                                except OSError:
+                                    cand_coll = True
+                            if not cand_coll:
+                                fn = cand_fn
+                                target_dir = cand_dir
+                                break
+                            counter += 1
+
+                    reserved_batch_targets.add(os.path.normcase(os.path.abspath(target_dir)))
+                    batch_dest_map[input_file] = (fn, target_dir)
+                else:
+                    norm_fn = os.path.normcase(fn)
+                    if norm_fn in reserved_batch_targets:
+                        counter = 2
+                        m = re.search(r'^(.*?)\s*\((\d+)\)$', fn)
+                        fn_base = m.group(1).rstrip() if m else fn
+                        if m:
+                            counter = int(m.group(2)) + 1
+                        while True:
+                            cand_fn = f"{fn_base} ({counter})"
+                            if os.path.normcase(cand_fn) not in reserved_batch_targets:
+                                fn = cand_fn
+                                break
+                            counter += 1
+
+                    reserved_batch_targets.add(os.path.normcase(fn))
+                    batch_dest_map[input_file] = (fn, self.output_dir)
+
+            reserved_output_paths = set()
+
             total_files = len(self.input_files)
             for file_idx, current_input_file in enumerate(self.input_files, 1):
                 if self._stop_event.is_set():
@@ -173,18 +268,20 @@ class SeparationThread(threading.Thread):
                 
                 # --- Create a safe ASCII file path for processing to bypass FFmpeg/AudioSeparator unicode issues ---
                 # We also convert to WAV, downmix to stereo (-ac 2), and strip video streams (-vn).
+                session_dir = self._session_temp_dir if self._session_temp_dir else tempfile.gettempdir()
                 safe_base = f"audio_in_{uuid.uuid4().hex[:8]}"
-                safe_input_file = os.path.join(tempfile.gettempdir(), f"{safe_base}.wav")
+                safe_input_file = os.path.join(session_dir, f"{safe_base}.wav")
                 
                 try:
                     # -ac 2: downmix any multi-channel audio (e.g. 5.1) to stereo; no effect if already stereo/mono
+                    # -c:a pcm_f32le: preserve 32-bit floating point precision (prevents 16-bit truncation)
                     if self.enable_preview and self.preview_mode == "final":
-                        ffmpeg_cmd = ['ffmpeg', '-y', '-sseof', '-30', '-i', current_input_file, '-vn', '-ac', '2', safe_input_file]
+                        ffmpeg_cmd = ['ffmpeg', '-y', '-sseof', '-30', '-i', current_input_file, '-vn', '-ac', '2', '-c:a', 'pcm_f32le', safe_input_file]
                     else:
                         ffmpeg_cmd = ['ffmpeg', '-y', '-i', current_input_file, '-vn', '-ac', '2']
                         if self.enable_preview:
                             ffmpeg_cmd += ['-t', '30']
-                        ffmpeg_cmd.append(safe_input_file)
+                        ffmpeg_cmd += ['-c:a', 'pcm_f32le', safe_input_file]
                     
                     subprocess.run(
                         ffmpeg_cmd,
@@ -195,7 +292,7 @@ class SeparationThread(threading.Thread):
 
                 if not os.path.exists(safe_input_file):
                     _, input_ext = os.path.splitext(current_input_file)
-                    safe_input_file = os.path.join(tempfile.gettempdir(), f"{safe_base}{input_ext}")
+                    safe_input_file = os.path.join(session_dir, f"{safe_base}{input_ext}")
                     shutil.copy2(current_input_file, safe_input_file)
 
                 # --- Peak normalization to -0.1 dBFS ---
@@ -212,9 +309,9 @@ class SeparationThread(threading.Thread):
                         max_vol_db = float(peak_match.group(1))
                         gain_db = -0.1 - max_vol_db  # gain needed to bring peak to -0.1 dBFS
                         if abs(gain_db) > 0.01:  # skip if already within 0.01 dB of target
-                            norm_file = os.path.join(tempfile.gettempdir(), f"{safe_base}_norm.wav")
+                            norm_file = os.path.join(session_dir, f"{safe_base}_norm.wav")
                             subprocess.run(
-                                ['ffmpeg', '-y', '-i', safe_input_file, '-af', f'volume={gain_db:.4f}dB', norm_file],
+                                ['ffmpeg', '-y', '-i', safe_input_file, '-af', f'volume={gain_db:.4f}dB', '-c:a', 'pcm_f32le', norm_file],
                                 check=True, capture_output=True
                             )
                             os.replace(norm_file, safe_input_file)
@@ -222,19 +319,13 @@ class SeparationThread(threading.Thread):
                     self.post_log(i18n.tr("log_normalization_skipped", error=norm_err))
 
                 base_input_name = os.path.splitext(os.path.basename(current_input_file))[0]
-
-                # Optional: Remove leading numbers from the folder name
-                folder_name = base_input_name
-                if self.remove_leading_numbers:
-                    folder_name = re.sub(r"^\d+[\s.\-_]+", "", base_input_name)
-
-                # Output directory: dedicated subfolder (default) or flat into output_dir
+                folder_name, file_output_dir = batch_dest_map[current_input_file]
                 if self.use_subfolder:
-                    file_output_dir = os.path.join(self.output_dir, folder_name)
                     os.makedirs(file_output_dir, exist_ok=True)
-                else:
-                    file_output_dir = self.output_dir
+                    if folder_name != base_input_name and not self.remove_leading_numbers:
+                        self.post_log(i18n.tr("status_folder_collision", folder=base_input_name, new_folder=folder_name))
                 separator.output_dir = file_output_dir
+
 
                 if self.preset_config:
                     preset_type = self.preset_config.get("type", "chain")
@@ -245,12 +336,15 @@ class SeparationThread(threading.Thread):
                         self.post_log(i18n.tr("status_starting", file=os.path.basename(current_input_file)))
                         
                         old_stderr = sys.stderr
-                        sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
+                        sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr, check_stop_func=lambda: self._stop_event.is_set())
                         try:
                             m1_outputs = separator.separate(safe_input_file)
                         finally:
                             sys.stderr = old_stderr
                         
+                        if self._stop_event.is_set():
+                            break
+
                         final_outputs = []
                         rename_map = self.preset_config.get("rename_map", {})
                         mix_remaining_to = self.preset_config.get("mix_remaining_to")
@@ -262,6 +356,8 @@ class SeparationThread(threading.Thread):
                         paths_to_mix = []
                         
                         for f in m1_outputs:
+                            if self._stop_event.is_set():
+                                break
                             stem = stem_from_filename(f)
                             old_path = os.path.join(file_output_dir, f)
                             
@@ -274,8 +370,11 @@ class SeparationThread(threading.Thread):
                                     new_name = f"{suffix}{clean_ext}"
                                 
                                 new_path = os.path.join(file_output_dir, new_name)
-                                if os.path.exists(new_path):
-                                    os.remove(new_path)
+                                if (os.path.exists(new_path) and old_path != new_path) or os.path.normcase(new_path) in reserved_output_paths:
+                                    new_path = get_unique_path(new_path, reserved_output_paths)
+                                    new_name = os.path.basename(new_path)
+                                    self.post_log(i18n.tr("status_renamed_collision", file=new_name))
+                                reserved_output_paths.add(os.path.normcase(new_path))
                                 os.rename(old_path, new_path)
                                 final_outputs.append(new_name)
                             else:
@@ -285,6 +384,9 @@ class SeparationThread(threading.Thread):
                                     if os.path.exists(old_path):
                                         os.remove(old_path)
                                         
+                        if self._stop_event.is_set():
+                            break
+
                         if mix_remaining_to and paths_to_mix:
                             self.post_log(i18n.tr("status_ensemble_mixing") or "Mixing remaining stems...")
                             mixed_data = None
@@ -309,9 +411,12 @@ class SeparationThread(threading.Thread):
                                     mix_name = f"{suffix}{clean_ext}"
                                     
                                 mix_path = os.path.join(file_output_dir, mix_name)
-                                if os.path.exists(mix_path):
-                                    os.remove(mix_path)
-                                sf.write(mix_path, mixed_data, samplerate)
+                                if os.path.exists(mix_path) or os.path.normcase(mix_path) in reserved_output_paths:
+                                    mix_path = get_unique_path(mix_path, reserved_output_paths)
+                                    mix_name = os.path.basename(mix_path)
+                                    self.post_log(i18n.tr("status_renamed_collision", file=mix_name))
+                                reserved_output_paths.add(os.path.normcase(mix_path))
+                                sf.write(mix_path, mixed_data, samplerate, subtype='FLOAT')
                                 final_outputs.append(mix_name)
                                 
                             for path in paths_to_mix:
@@ -335,11 +440,16 @@ class SeparationThread(threading.Thread):
                         separator.output_dir = temp_dir_1
                         separator.load_model(model_filename=self.preset_config["model_1"])
                         old_stderr = sys.stderr
-                        sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
+                        sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr, check_stop_func=lambda: self._stop_event.is_set())
                         try:
                             output_files_1 = separator.separate(safe_input_file)
                         finally:
                             sys.stderr = old_stderr
+
+                        if self._stop_event.is_set():
+                            shutil.rmtree(temp_dir_1, ignore_errors=True)
+                            shutil.rmtree(temp_dir_2, ignore_errors=True)
+                            break
 
                         # Pass 2
                         self.post_progress(0)
@@ -347,11 +457,16 @@ class SeparationThread(threading.Thread):
                         separator.output_dir = temp_dir_2
                         separator.load_model(model_filename=self.preset_config["model_2"])
                         old_stderr = sys.stderr
-                        sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
+                        sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr, check_stop_func=lambda: self._stop_event.is_set())
                         try:
                             output_files_2 = separator.separate(safe_input_file)
                         finally:
                             sys.stderr = old_stderr
+
+                        if self._stop_event.is_set():
+                            shutil.rmtree(temp_dir_1, ignore_errors=True)
+                            shutil.rmtree(temp_dir_2, ignore_errors=True)
+                            break
 
                         self.post_progress(0)
                         self.post_log(i18n.tr("status_ensemble_mixing"))
@@ -365,14 +480,24 @@ class SeparationThread(threading.Thread):
                             if f2:
                                 p1 = os.path.join(temp_dir_1, f1)
                                 p2 = os.path.join(temp_dir_2, f2)
-                                mixed, sr1 = blend_audio(p1, p2, algorithm)
+                                d1, sr1 = sf.read(p1, dtype='float32')
+                                d2, sr2 = sf.read(p2, dtype='float32')
+                                if sr1 != sr2:
+                                    d2 = resample_audio(d2, sr2, sr1)
+                                mixed = blend_audio(d1, d2, algorithm)
                                 suffix = stem1.capitalize()
                                 if not self.use_subfolder:
                                     out_name = f"{folder_name}_Ensemble_{suffix}{clean_ext}"
                                 else:
                                     out_name = f"Ensemble_{suffix}{clean_ext}"
                                 
-                                sf.write(os.path.join(file_output_dir, out_name), mixed, sr1)
+                                out_path = os.path.join(file_output_dir, out_name)
+                                if os.path.exists(out_path) or os.path.normcase(out_path) in reserved_output_paths:
+                                    out_path = get_unique_path(out_path, reserved_output_paths)
+                                    out_name = os.path.basename(out_path)
+                                    self.post_log(i18n.tr("status_renamed_collision", file=out_name))
+                                reserved_output_paths.add(os.path.normcase(out_path))
+                                sf.write(out_path, mixed, sr1, subtype='FLOAT')
                                 final_outputs.append(out_name)
                             else:
                                 suffix = f"{stem1.capitalize()}_M1"
@@ -381,7 +506,13 @@ class SeparationThread(threading.Thread):
                                 else:
                                     out_name = f"Ensemble_{suffix}{clean_ext}"
                                     
-                                shutil.copy(os.path.join(temp_dir_1, f1), os.path.join(file_output_dir, out_name))
+                                out_path = os.path.join(file_output_dir, out_name)
+                                if os.path.exists(out_path) or os.path.normcase(out_path) in reserved_output_paths:
+                                    out_path = get_unique_path(out_path, reserved_output_paths)
+                                    out_name = os.path.basename(out_path)
+                                    self.post_log(i18n.tr("status_renamed_collision", file=out_name))
+                                reserved_output_paths.add(os.path.normcase(out_path))
+                                shutil.copy(os.path.join(temp_dir_1, f1), out_path)
                                 final_outputs.append(out_name)
                         # Stems only in M2
                         for f2 in output_files_2:
@@ -394,7 +525,13 @@ class SeparationThread(threading.Thread):
                                 else:
                                     out_name = f"Ensemble_{suffix}{clean_ext}"
                                     
-                                shutil.copy(os.path.join(temp_dir_2, f2), os.path.join(file_output_dir, out_name))
+                                out_path = os.path.join(file_output_dir, out_name)
+                                if os.path.exists(out_path) or os.path.normcase(out_path) in reserved_output_paths:
+                                    out_path = get_unique_path(out_path, reserved_output_paths)
+                                    out_name = os.path.basename(out_path)
+                                    self.post_log(i18n.tr("status_renamed_collision", file=out_name))
+                                reserved_output_paths.add(os.path.normcase(out_path))
+                                shutil.copy(os.path.join(temp_dir_2, f2), out_path)
                                 final_outputs.append(out_name)
 
                         shutil.rmtree(temp_dir_1, ignore_errors=True)
@@ -450,6 +587,8 @@ class SeparationThread(threading.Thread):
                         stem_cache = {}
                         current_pass_file = safe_input_file
                         for i, step in enumerate(chain_steps):
+                            if self._stop_event.is_set():
+                                break
                             step_num = step["step_num"]
                             model_file = step["model"]
                             pass_stem = step["pass_stem"]
@@ -485,7 +624,7 @@ class SeparationThread(threading.Thread):
                                     try:
                                         d_arr, d_sr = sf.read(src, dtype='float32')
                                         d_arr = d_arr * (10.0 ** (g / 20.0))
-                                        sf.write(dst, d_arr, d_sr)
+                                        sf.write(dst, d_arr, d_sr, subtype='FLOAT')
                                         return
                                     except Exception:
                                         pass
@@ -498,17 +637,21 @@ class SeparationThread(threading.Thread):
                             separator.load_model(model_filename=model_file)
 
                             old_stderr = sys.stderr
-                            sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
+                            sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr, check_stop_func=lambda: self._stop_event.is_set())
                             try:
                                 step_output_files = separator.separate(current_pass_file)
                             finally:
                                 sys.stderr = old_stderr
 
+                            if self._stop_event.is_set():
+                                shutil.rmtree(temp_dir, ignore_errors=True)
+                                break
+
                             # Cache all stems produced in this step for potential downstream branch consumption
                             stem_cache[step_num] = {}
                             for f in step_output_files:
                                 st = stem_from_filename(f)
-                                cached_copy = os.path.join(tempfile.gettempdir(), f"branch_cache_s{step_num}_{st}_{uuid.uuid4().hex[:6]}.wav")
+                                cached_copy = os.path.join(session_dir, f"branch_cache_s{step_num}_{st}_{uuid.uuid4().hex[:6]}.wav")
                                 shutil.copy2(os.path.join(temp_dir, f), cached_copy)
                                 stem_cache[step_num][st] = cached_copy
 
@@ -526,6 +669,11 @@ class SeparationThread(threading.Thread):
                                     suffix_clean = keep_pass_stem_name.lstrip('_')
                                     out_name = f"{folder_name}_{suffix_clean}{clean_ext}" if not self.use_subfolder else f"{suffix_clean}{clean_ext}"
                                     final_path = os.path.join(file_output_dir, out_name)
+                                    if os.path.exists(final_path) or os.path.normcase(final_path) in reserved_output_paths:
+                                        final_path = get_unique_path(final_path, reserved_output_paths)
+                                        out_name = os.path.basename(final_path)
+                                        self.post_log(i18n.tr("status_renamed_collision", file=out_name))
+                                    reserved_output_paths.add(os.path.normcase(final_path))
                                     _copy_with_gain(os.path.join(temp_dir, f), final_path, gain_db)
                                     final_outputs.append(out_name)
                                     continue
@@ -538,6 +686,11 @@ class SeparationThread(threading.Thread):
                                         suffix_clean = suffix.lstrip('_')
                                         out_name = f"{folder_name}_{suffix_clean}{clean_ext}" if not self.use_subfolder else f"{suffix_clean}{clean_ext}"
                                         final_path = os.path.join(file_output_dir, out_name)
+                                        if os.path.exists(final_path) or os.path.normcase(final_path) in reserved_output_paths:
+                                            final_path = get_unique_path(final_path, reserved_output_paths)
+                                            out_name = os.path.basename(final_path)
+                                            self.post_log(i18n.tr("status_renamed_collision", file=out_name))
+                                        reserved_output_paths.add(os.path.normcase(final_path))
                                         _copy_with_gain(os.path.join(temp_dir, f), final_path, gain_db)
                                         final_outputs.append(out_name)
                                 else:
@@ -546,6 +699,11 @@ class SeparationThread(threading.Thread):
                                         suffix_clean = def_keep.lstrip('_')
                                         out_name = f"{folder_name}_{suffix_clean}{clean_ext}" if not self.use_subfolder else f"{suffix_clean}{clean_ext}"
                                         final_path = os.path.join(file_output_dir, out_name)
+                                        if os.path.exists(final_path) or os.path.normcase(final_path) in reserved_output_paths:
+                                            final_path = get_unique_path(final_path, reserved_output_paths)
+                                            out_name = os.path.basename(final_path)
+                                            self.post_log(i18n.tr("status_renamed_collision", file=out_name))
+                                        reserved_output_paths.add(os.path.normcase(final_path))
                                         _copy_with_gain(os.path.join(temp_dir, f), final_path, gain_db)
                                         final_outputs.append(out_name)
 
@@ -567,9 +725,17 @@ class SeparationThread(threading.Thread):
                                     self.post_log(i18n.tr("log_missing_pass_stem", stem=pass_stem))
                                     break
                                 if next_pass_file:
-                                    persistent_next_pass = os.path.join(tempfile.gettempdir(), f"chain_pass_{uuid.uuid4().hex[:8]}.wav")
+                                    prev_pass = current_pass_file if current_pass_file != safe_input_file else None
+                                    persistent_next_pass = os.path.join(session_dir, f"chain_pass_{uuid.uuid4().hex[:8]}.wav")
                                     shutil.copy2(next_pass_file, persistent_next_pass)
                                     current_pass_file = persistent_next_pass
+                                    # Clean up previous pass file if not referenced in branch cache
+                                    if prev_pass and os.path.exists(prev_pass):
+                                        if not any(prev_pass in s_dict.values() for s_dict in stem_cache.values()):
+                                            try:
+                                                os.remove(prev_pass)
+                                            except Exception:
+                                                pass
 
                             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -581,10 +747,23 @@ class SeparationThread(threading.Thread):
                                         os.remove(c_path)
                                 except Exception:
                                     pass
+                        stem_cache.clear()
+
+                        # Clean up final pass intermediate file if created
+                        if current_pass_file != safe_input_file and os.path.exists(current_pass_file):
+                            try:
+                                os.remove(current_pass_file)
+                            except Exception:
+                                pass
+
+                        if self._stop_event.is_set():
+                            break
 
                         # Post-mix rules (e.g. summing stems or subtracting vocals from input mix)
                         post_mix_rules = self.preset_config.get("post_mix", []) if self.preset_config else []
                         for pm_rule in post_mix_rules:
+                            if self._stop_event.is_set():
+                                break
                             out_suffix = pm_rule.get("output", "")
                             if not out_suffix:
                                 continue
@@ -598,7 +777,10 @@ class SeparationThread(threading.Thread):
                                         match_file = next((f for f in final_outputs if os.path.splitext(f)[0] in (f"{folder_name}_{clean_key}", clean_key)), None)
                                         if match_file:
                                             full_p = os.path.join(file_output_dir, match_file)
-                                            data, _ = sf.read(full_p, dtype='float32')
+                                            data, stem_sr = sf.read(full_p, dtype='float32')
+                                            if stem_sr != in_sr:
+                                                self.post_log(f"Resampling {match_file} from {stem_sr}Hz to {in_sr}Hz for exact alignment")
+                                                data = resample_audio(data, stem_sr, in_sr)
                                             if sub_data.ndim == 2 and data.ndim == 1:
                                                 data = np.tile(data[:, None], (1, sub_data.shape[1]))
                                             elif sub_data.ndim == 1 and data.ndim == 2:
@@ -609,7 +791,12 @@ class SeparationThread(threading.Thread):
                                     out_sfx_clean = out_suffix.lstrip('_')
                                     out_mix_name = f"{folder_name}_{out_sfx_clean}.wav" if not self.use_subfolder else f"{out_sfx_clean}.wav"
                                     out_mix_path = os.path.join(file_output_dir, out_mix_name)
-                                    sf.write(out_mix_path, sub_data, in_sr)
+                                    if os.path.exists(out_mix_path) or os.path.normcase(out_mix_path) in reserved_output_paths:
+                                        out_mix_path = get_unique_path(out_mix_path, reserved_output_paths)
+                                        out_mix_name = os.path.basename(out_mix_path)
+                                        self.post_log(i18n.tr("status_renamed_collision", file=out_mix_name))
+                                    reserved_output_paths.add(os.path.normcase(out_mix_path))
+                                    sf.write(out_mix_path, sub_data, in_sr, subtype='FLOAT')
                                     if out_mix_name not in final_outputs:
                                         final_outputs.append(out_mix_name)
                                 except Exception as sub_err:
@@ -634,6 +821,8 @@ class SeparationThread(threading.Thread):
                                             data, sr = sf.read(full_p, dtype='float32')
                                             if mix_sr is None:
                                                 mix_sr = sr
+                                            elif sr != mix_sr:
+                                                data = resample_audio(data, sr, mix_sr)
                                             if mixed_audio is None:
                                                 mixed_audio = data
                                             else:
@@ -650,7 +839,12 @@ class SeparationThread(threading.Thread):
                                     out_sfx_clean = out_suffix.lstrip('_')
                                     out_mix_name = f"{folder_name}_{out_sfx_clean}.wav" if not self.use_subfolder else f"{out_sfx_clean}.wav"
                                     out_mix_path = os.path.join(file_output_dir, out_mix_name)
-                                    sf.write(out_mix_path, mixed_audio, mix_sr)
+                                    if os.path.exists(out_mix_path) or os.path.normcase(out_mix_path) in reserved_output_paths:
+                                        out_mix_path = get_unique_path(out_mix_path, reserved_output_paths)
+                                        out_mix_name = os.path.basename(out_mix_path)
+                                        self.post_log(i18n.tr("status_renamed_collision", file=out_mix_name))
+                                    reserved_output_paths.add(os.path.normcase(out_mix_path))
+                                    sf.write(out_mix_path, mixed_audio, mix_sr, subtype='FLOAT')
                                     if out_mix_name not in final_outputs:
                                         final_outputs.append(out_mix_name)
 
@@ -677,11 +871,14 @@ class SeparationThread(threading.Thread):
                     self.post_log(i18n.tr("status_starting", file=os.path.basename(current_input_file)))
                 
                     old_stderr = sys.stderr
-                    sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
+                    sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr, check_stop_func=lambda: self._stop_event.is_set())
                     try:
                         output_files = separator.separate(safe_input_file)
                     finally:
                         sys.stderr = old_stderr
+
+                    if self._stop_event.is_set():
+                        break
 
                     renamed_output_files = []
                     for f in output_files:
@@ -695,8 +892,11 @@ class SeparationThread(threading.Thread):
                                 new_name = suffix
                             
                             new_path = os.path.join(file_output_dir, new_name)
-                            if os.path.exists(new_path) and old_path != new_path:
-                                os.remove(new_path)
+                            if (os.path.exists(new_path) and old_path != new_path) or os.path.normcase(new_path) in reserved_output_paths:
+                                new_path = get_unique_path(new_path, reserved_output_paths)
+                                new_name = os.path.basename(new_path)
+                                self.post_log(i18n.tr("status_renamed_collision", file=new_name))
+                            reserved_output_paths.add(os.path.normcase(new_path))
                             os.rename(old_path, new_path)
                             renamed_output_files.append(new_name)
                         else:
@@ -714,11 +914,16 @@ class SeparationThread(threading.Thread):
                     separator.output_dir = temp_dir_1
                     separator.load_model(model_filename=self.model_name)
                     old_stderr = sys.stderr
-                    sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
+                    sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr, check_stop_func=lambda: self._stop_event.is_set())
                     try:
                         output_files_1 = separator.separate(safe_input_file)
                     finally:
                         sys.stderr = old_stderr
+
+                    if self._stop_event.is_set():
+                        shutil.rmtree(temp_dir_1, ignore_errors=True)
+                        shutil.rmtree(temp_dir_2, ignore_errors=True)
+                        break
 
                     # Pass 2
                     self.post_progress(0)
@@ -726,11 +931,16 @@ class SeparationThread(threading.Thread):
                     separator.output_dir = temp_dir_2
                     separator.load_model(model_filename=self.model_name_2)
                     old_stderr = sys.stderr
-                    sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr)
+                    sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr, check_stop_func=lambda: self._stop_event.is_set())
                     try:
                         output_files_2 = separator.separate(safe_input_file)
                     finally:
                         sys.stderr = old_stderr
+
+                    if self._stop_event.is_set():
+                        shutil.rmtree(temp_dir_1, ignore_errors=True)
+                        shutil.rmtree(temp_dir_2, ignore_errors=True)
+                        break
 
                     # Blending
                     self.post_log(i18n.tr("status_ensemble_mixing") + f" [{algorithm}]")
@@ -742,8 +952,10 @@ class SeparationThread(threading.Thread):
                         match_2 = [f for f in output_files_2 if stem_from_filename(f) in (stem1, "other" if stem1 == "instrumental" else None)]
                         clean_ext = os.path.splitext(f1)[1]
                         if match_2:
-                            d1, sr1 = sf.read(os.path.join(temp_dir_1, f1))
-                            d2, _ = sf.read(os.path.join(temp_dir_2, match_2[0]))
+                            d1, sr1 = sf.read(os.path.join(temp_dir_1, f1), dtype='float32')
+                            d2, sr2 = sf.read(os.path.join(temp_dir_2, match_2[0]), dtype='float32')
+                            if sr1 != sr2:
+                                d2 = resample_audio(d2, sr2, sr1)
                             mixed = blend_audio(d1, d2, algorithm)
                             
                             suffix = stem1.capitalize()
@@ -752,7 +964,13 @@ class SeparationThread(threading.Thread):
                             else:
                                 out_name = f"Ensemble_{suffix}{clean_ext}"
                             
-                            sf.write(os.path.join(file_output_dir, out_name), mixed, sr1)
+                            out_path = os.path.join(file_output_dir, out_name)
+                            if os.path.exists(out_path) or os.path.normcase(out_path) in reserved_output_paths:
+                                out_path = get_unique_path(out_path, reserved_output_paths)
+                                out_name = os.path.basename(out_path)
+                                self.post_log(i18n.tr("status_renamed_collision", file=out_name))
+                            reserved_output_paths.add(os.path.normcase(out_path))
+                            sf.write(out_path, mixed, sr1, subtype='FLOAT')
                             final_outputs.append(out_name)
                         else:
                             suffix = f"{stem1.capitalize()}_M1"
@@ -761,7 +979,13 @@ class SeparationThread(threading.Thread):
                             else:
                                 out_name = f"Ensemble_{suffix}{clean_ext}"
                                 
-                            shutil.copy(os.path.join(temp_dir_1, f1), os.path.join(file_output_dir, out_name))
+                            out_path = os.path.join(file_output_dir, out_name)
+                            if os.path.exists(out_path) or os.path.normcase(out_path) in reserved_output_paths:
+                                out_path = get_unique_path(out_path, reserved_output_paths)
+                                out_name = os.path.basename(out_path)
+                                self.post_log(i18n.tr("status_renamed_collision", file=out_name))
+                            reserved_output_paths.add(os.path.normcase(out_path))
+                            shutil.copy(os.path.join(temp_dir_1, f1), out_path)
                             final_outputs.append(out_name)
                     # Stems only in M2
                     for f2 in output_files_2:
@@ -776,7 +1000,13 @@ class SeparationThread(threading.Thread):
                             else:
                                 out_name = f"Ensemble_{suffix}{clean_ext}"
                                 
-                            shutil.copy(os.path.join(temp_dir_2, f2), os.path.join(file_output_dir, out_name))
+                            out_path = os.path.join(file_output_dir, out_name)
+                            if os.path.exists(out_path) or os.path.normcase(out_path) in reserved_output_paths:
+                                out_path = get_unique_path(out_path, reserved_output_paths)
+                                out_name = os.path.basename(out_path)
+                                self.post_log(i18n.tr("status_renamed_collision", file=out_name))
+                            reserved_output_paths.add(os.path.normcase(out_path))
+                            shutil.copy(os.path.join(temp_dir_2, f2), out_path)
                             final_outputs.append(out_name)
 
                     shutil.rmtree(temp_dir_1, ignore_errors=True)
@@ -791,20 +1021,27 @@ class SeparationThread(threading.Thread):
                         pass
 
                 # --- Silent stem detection and optional deletion (executed BEFORE format conversion) ---
+                if self._stop_event.is_set():
+                    break
+
                 if self.delete_silent_stems and output_files:
                     surviving = []
                     for fname in output_files:
+                        if self._stop_event.is_set():
+                            break
                         fpath = os.path.join(file_output_dir, fname) if not os.path.isabs(fname) else fname
                         if not os.path.exists(fpath):
                             surviving.append(fname)
                             continue
 
-                        peak_db, rms_db = get_audio_volume_stats(fpath)
-                        # A stem is silent if its peak is below the threshold OR if its average RMS energy is deeply in the noise floor
-                        # (e.g. inactive stem with a single 1-sample transient artifact)
-                        is_silent = (peak_db < self.silent_stem_threshold) or (rms_db < (self.silent_stem_threshold - 10.0))
-
+                        is_silent, peak_db, rms_db = is_audio_silent(fpath, self.silent_stem_threshold)
                         display_name = os.path.basename(fname)
+
+                        if peak_db is None or rms_db is None:
+                            self.post_log(i18n.tr("status_silent_stem_error", file=display_name))
+                            surviving.append(fname)
+                            continue
+
                         if is_silent:
                             try:
                                 os.remove(fpath)
@@ -817,6 +1054,9 @@ class SeparationThread(threading.Thread):
                             surviving.append(fname)
                     output_files = surviving
 
+                if self._stop_event.is_set():
+                    break
+
                 # --- Format conversion (runs only on active/surviving stems) ---
                 if self.output_format == "WAV":
                     bd_str = str(self.bit_depth).lower()
@@ -824,9 +1064,11 @@ class SeparationThread(threading.Thread):
                         codec = "pcm_s16le" if "16" in bd_str else "pcm_s24le"
                         target_bd = "16-bit" if "16" in bd_str else "24-bit"
                         for file in output_files:
+                            if self._stop_event.is_set():
+                                break
                             try:
                                 fpath = os.path.join(file_output_dir, file)
-                                tmp_path = os.path.join(file_output_dir, f"tmp_{file}")
+                                tmp_path = os.path.join(session_dir, f"tmp_bd_{uuid.uuid4().hex[:8]}_{file}")
                                 self.post_log(i18n.tr("status_converting", file=file, format=f"WAV ({target_bd})"))
                                 cmd = ["ffmpeg", "-y", "-i", fpath, "-c:a", codec, tmp_path]
                                 result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -838,25 +1080,75 @@ class SeparationThread(threading.Thread):
                             except Exception as ex:
                                 self.post_log(i18n.tr("log_convert_error", file=file, error=ex))
 
-                elif self.output_format in ("FLAC", "MP3"):
+                elif self.output_format in ("FLAC", "MP3", "AIFF", "ALAC"):
                     new_files = []
                     for file in output_files:
+                        if self._stop_event.is_set():
+                            break
                         try:
                             old_path = os.path.join(file_output_dir, file)
                             base, _ = os.path.splitext(file)
-                            new_ext = f".{self.output_format.lower()}"
-                            new_filename = f"{base}{new_ext}"
-                            new_path = os.path.join(file_output_dir, new_filename)
                         
                             if self.output_format == "FLAC":
+                                new_ext = ".flac"
                                 bd_str = str(self.bit_depth).lower()
                                 sample_fmt = "s16" if "16" in bd_str else "s32"
                                 target_bd = "16-bit" if "16" in bd_str else "24-bit"
+                                new_filename = f"{base}{new_ext}"
+                                new_path = os.path.join(file_output_dir, new_filename)
+                                if (os.path.exists(new_path) and os.path.normcase(new_path) != os.path.normcase(old_path)) or os.path.normcase(new_path) in reserved_output_paths:
+                                    new_path = get_unique_path(new_path, reserved_output_paths)
+                                    new_filename = os.path.basename(new_path)
+                                    self.post_log(i18n.tr("status_renamed_collision", file=new_filename))
+                                reserved_output_paths.add(os.path.normcase(new_path))
                                 self.post_log(i18n.tr("status_converting", file=file, format=f"FLAC ({target_bd})"))
                                 cmd = ["ffmpeg", "-y", "-i", old_path, "-c:a", "flac", "-sample_fmt", sample_fmt, new_path]
+                            elif self.output_format == "AIFF":
+                                new_ext = ".aiff"
+                                bd_str = str(self.bit_depth).lower()
+                                if "16" in bd_str:
+                                    codec = "pcm_s16be"
+                                    target_bd = "16-bit"
+                                elif "24" in bd_str:
+                                    codec = "pcm_s24be"
+                                    target_bd = "24-bit"
+                                else:
+                                    codec = "pcm_f32be"
+                                    target_bd = "32-bit Float"
+                                new_filename = f"{base}{new_ext}"
+                                new_path = os.path.join(file_output_dir, new_filename)
+                                if (os.path.exists(new_path) and os.path.normcase(new_path) != os.path.normcase(old_path)) or os.path.normcase(new_path) in reserved_output_paths:
+                                    new_path = get_unique_path(new_path, reserved_output_paths)
+                                    new_filename = os.path.basename(new_path)
+                                    self.post_log(i18n.tr("status_renamed_collision", file=new_filename))
+                                reserved_output_paths.add(os.path.normcase(new_path))
+                                self.post_log(i18n.tr("status_converting", file=file, format=f"AIFF ({target_bd})"))
+                                cmd = ["ffmpeg", "-y", "-i", old_path, "-c:a", codec, new_path]
+                            elif self.output_format == "ALAC":
+                                new_ext = ".m4a"
+                                bd_str = str(self.bit_depth).lower()
+                                sample_fmt = "s16p" if "16" in bd_str else "s32p"
+                                target_bd = "16-bit" if "16" in bd_str else "24-bit"
+                                new_filename = f"{base}{new_ext}"
+                                new_path = os.path.join(file_output_dir, new_filename)
+                                if (os.path.exists(new_path) and os.path.normcase(new_path) != os.path.normcase(old_path)) or os.path.normcase(new_path) in reserved_output_paths:
+                                    new_path = get_unique_path(new_path, reserved_output_paths)
+                                    new_filename = os.path.basename(new_path)
+                                    self.post_log(i18n.tr("status_renamed_collision", file=new_filename))
+                                reserved_output_paths.add(os.path.normcase(new_path))
+                                self.post_log(i18n.tr("status_converting", file=file, format=f"ALAC ({target_bd})"))
+                                cmd = ["ffmpeg", "-y", "-i", old_path, "-c:a", "alac", "-sample_fmt", sample_fmt, new_path]
                             else: # MP3
+                                new_ext = ".mp3"
                                 mp3_b = re.sub(r'[^0-9]', '', str(self.bitrate))
                                 b_arg = f"{mp3_b}k" if mp3_b else "320k"
+                                new_filename = f"{base}{new_ext}"
+                                new_path = os.path.join(file_output_dir, new_filename)
+                                if (os.path.exists(new_path) and os.path.normcase(new_path) != os.path.normcase(old_path)) or os.path.normcase(new_path) in reserved_output_paths:
+                                    new_path = get_unique_path(new_path, reserved_output_paths)
+                                    new_filename = os.path.basename(new_path)
+                                    self.post_log(i18n.tr("status_renamed_collision", file=new_filename))
+                                reserved_output_paths.add(os.path.normcase(new_path))
                                 self.post_log(i18n.tr("status_converting", file=file, format=f"MP3 ({b_arg})"))
                                 cmd = ["ffmpeg", "-y", "-i", old_path, "-c:a", "libmp3lame", "-b:a", b_arg, new_path]
                             
@@ -880,15 +1172,36 @@ class SeparationThread(threading.Thread):
                     if os.path.exists(fpath):
                         self.all_output_files.append(fpath)
 
-            self.post_progress(100)
-            self.post_log(i18n.tr("status_complete", files=output_files))
+            if self._stop_event.is_set():
+                self.post_log(i18n.tr("status_cancelled"))
+                if self.on_done:
+                    try:
+                        self.on_done(False, i18n.tr("msg_cancelled"), self.all_output_files)
+                    except Exception:
+                        pass
+                if self.parent:
+                    wx.PostEvent(self.parent, DoneEvent(False, i18n.tr("msg_cancelled"), output_files=self.all_output_files, status="cancelled"))
+            else:
+                self.post_progress(100)
+                self.post_log(i18n.tr("status_complete", files=output_files))
+                if self.on_done:
+                    try:
+                        self.on_done(True, i18n.tr("msg_success"), self.all_output_files)
+                    except Exception:
+                        pass
+                if self.parent:
+                    wx.PostEvent(self.parent, DoneEvent(True, i18n.tr("msg_success"), output_files=self.all_output_files, status="success"))
+
+        except (KeyboardInterrupt, SystemExit):
+            self._stop_event.set()
+            self.post_log(i18n.tr("status_cancelled"))
             if self.on_done:
                 try:
-                    self.on_done(True, i18n.tr("msg_success"), self.all_output_files)
+                    self.on_done(False, i18n.tr("msg_cancelled"), self.all_output_files)
                 except Exception:
                     pass
             if self.parent:
-                wx.PostEvent(self.parent, DoneEvent(True, i18n.tr("msg_success"), output_files=self.all_output_files))
+                wx.PostEvent(self.parent, DoneEvent(False, i18n.tr("msg_cancelled"), output_files=self.all_output_files, status="cancelled"))
 
         except Exception as e:
             import traceback
@@ -958,11 +1271,15 @@ class SeparationThread(threading.Thread):
                 except Exception:
                     pass
 
-            # Remove temp dirs and the converted input WAV left behind by an
-            # error path (normally cleaned per-file, but failures skip that code).
+            # Remove temp dirs, tracked intermediate files, and session temp dir (B07)
             for path in self._temp_dirs:
                 shutil.rmtree(path, ignore_errors=True)
             self._temp_dirs = []
+
+            if self._session_temp_dir and os.path.exists(self._session_temp_dir):
+                shutil.rmtree(self._session_temp_dir, ignore_errors=True)
+                self._session_temp_dir = None
+
             try:
                 if 'safe_input_file' in locals() and os.path.exists(safe_input_file):
                     os.remove(safe_input_file)
@@ -971,8 +1288,9 @@ class SeparationThread(threading.Thread):
 
     def _mkdtemp(self, prefix):
         # Tracked so run()'s finally can remove leftovers when separation fails
-        # mid-way (e.g. OOM), instead of leaving dirs in the output folder.
-        path = tempfile.mkdtemp(dir=self.output_dir, prefix=prefix)
+        # mid-way (e.g. OOM). Uses session temp dir to prevent polluting output folder.
+        base_dir = self._session_temp_dir if (self._session_temp_dir and os.path.exists(self._session_temp_dir)) else tempfile.gettempdir()
+        path = tempfile.mkdtemp(dir=base_dir, prefix=prefix)
         self._temp_dirs.append(path)
         return path
 

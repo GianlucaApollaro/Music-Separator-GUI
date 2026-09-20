@@ -268,6 +268,7 @@
             <h2>2. Novità nella v1.8 <span class="badge">Nuovo</span></h2>
             <div class="card">
                 <ul>
+                    <li><strong>Supporto Formati Audio AIFF e ALAC (Apple Lossless):</strong> Pieno supporto all'apertura e scansione batch di file <code>.aiff</code> e <code>.aif</code>, oltre all'esportazione professionale in formato non compresso AIFF (16-bit, 24-bit, 32-bit Float) e compresso lossless ALAC (16-bit e 24-bit in contenitore <code>.m4a</code>), assicurando la massima fedeltà e compatibilità ottimale con Logic Pro e l'ecosistema Apple.</li>
                     <li><strong>Preset Personalizzati con Catene Ramificate (Flussi ad Albero / Fork):</strong> I preset personalizzati ora supportano pipeline non-lineari. A partire dal 2° passo puoi selezionare come sorgente audio qualsiasi stem generato nei passi precedenti o l'audio originale, impostare rami terminali con <em>"Nessuno (fine di questo ramo)"</em> e conservare o rinominare gli stem generati in qualsiasi passaggio.</li>
                     <li><strong>Migliorata Accessibilità VoiceOver su macOS:</strong> Tutti i menu a tendina fissi sono stati convertiti nei widget nativi <code>wx.Choice</code> (mappati su <code>NSPopUpButton</code>), risolvendo le difficoltà storiche di lettura e navigazione con VoiceOver.</li>
                     <li><strong>Risoluzione Automatica Nomi Modelli:</strong> Risolto l'errore di modello non supportato quando si salvano preset personalizzati selezionando modelli dal catalogo online.</li>
@@ -288,7 +289,7 @@
             <h2>3. Uso Base (Modello Singolo)</h2>
             <p>Per avviare una classica separazione con un singolo modello:</p>
             <ol>
-                <li>Trascina o seleziona il tuo file audio nel campo <strong>File Audio Input</strong>.</li>
+                <li>Trascina o seleziona il tuo file audio (WAV, FLAC, MP3, AIFF, MP4, MKV, ecc.) nel campo <strong>File Audio Input</strong>.</li>
                 <li>Seleziona una <strong>Cartella di Output</strong>.</li>
                 <li>Fai clic sul campo <strong>Modello</strong> per selezionare il modello desiderato.
                     <ul>
@@ -297,10 +298,12 @@
                         <li>I modelli scaricati compaiono nella categoria speciale <strong>"Modelli Scaricati (Offline)"</strong> all'inizio della lista.</li>
                     </ul>
                 </li>
-                <li>Seleziona il formato di uscita (WAV, FLAC o MP3) e la qualità/risoluzione desiderata:
+                <li>Seleziona il formato di uscita (WAV, FLAC, MP3, AIFF o ALAC) e la qualità/risoluzione desiderata:
                     <ul>
                         <li><strong>WAV:</strong> 16-bit, 24-bit o 32-bit Float (qualità studio).</li>
-                        <li><strong>FLAC:</strong> 16-bit o 24-bit (lossless ad alta risoluzione).</li>
+                        <li><strong>FLAC:</strong> 16-bit o 24-bit (lossless compresso ad alta risoluzione).</li>
+                        <li><strong>AIFF:</strong> 16-bit, 24-bit o 32-bit Float (standard non compresso per audio professionale).</li>
+                        <li><strong>ALAC:</strong> 16-bit o 24-bit (Apple Lossless compresso in contenitore <code>.m4a</code>).</li>
                         <li><strong>MP3:</strong> 320 kbps, 256 kbps, 192 kbps o 128 kbps.</li>
                     </ul>
                 </li>
@@ -425,8 +428,8 @@
                     <li><code>-m, --model &lt;nome&gt;</code>: Nome visuale, alias o nome parziale del modello (non richiede estensioni come <code>.ckpt</code> o <code>.onnx</code>, es. <code>"Viperx-1297"</code> o <code>"Inst_HQ_5"</code>).</li>
                     <li><code>-p, --preset &lt;nome&gt;</code>: Nome o chiave di un preset (es. <code>preset_vocal_split</code> o <code>"Denoise + Vocals"</code>).</li>
                     <li><code>-r, --recursive</code>: Scansione ricorsiva delle sottocartelle.</li>
-                    <li><code>--format {WAV,FLAC,MP3}</code>: Formato audio di uscita (default: <code>WAV</code>).</li>
-                    <li><code>--bit-depth {16,24,32}</code>: Profondità in bit per WAV (16, 24, 32 Float) e FLAC (16, 24).</li>
+                    <li><code>--format {WAV,FLAC,MP3,AIFF,ALAC}</code>: Formato audio di uscita (default: <code>WAV</code>).</li>
+                    <li><code>--bit-depth {16,24,32}</code>: Profondità in bit per WAV/AIFF (16, 24, 32 Float) e FLAC/ALAC (16, 24).</li>
                     <li><code>--bitrate {320k,256k,192k}</code>: Bitrate per formato MP3 (default: 320k).</li>
                     <li><code>--gpu / --cpu</code>: Forza l'uso di GPU (CUDA/MPS) o CPU.</li>
                     <li><code>--no-subfolder</code>: Salva direttamente nella cartella di destinazione.</li>

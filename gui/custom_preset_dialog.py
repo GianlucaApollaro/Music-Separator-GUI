@@ -584,6 +584,20 @@ class CustomPresetDialog(wx.Dialog):
                 if rename_map:
                     config[f"m{step_idx}_rename_map"] = rename_map
                 
+        # Validate duplicate suffixes to prevent output collisions
+        duplicate_suffixes = PresetManager.validate_preset_suffixes(config)
+        if duplicate_suffixes:
+            dups_str = ", ".join(duplicate_suffixes)
+            warn_title = self.i18n.tr("msg_warning") or "Attenzione"
+            warn_msg = self.i18n.tr("preset_warn_duplicate_suffixes", suffixes=dups_str)
+            if not warn_msg or warn_msg == "preset_warn_duplicate_suffixes":
+                warn_msg = f"Attenzione: il preset contiene suffissi di output duplicati ({dups_str}). Continuare comunque?"
+            dlg = wx.MessageDialog(self, warn_msg, warn_title, wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING)
+            res = dlg.ShowModal()
+            dlg.Destroy()
+            if res != wx.ID_YES:
+                return
+
         # Save preset via manager
         self.preset_key = PresetManager.save_custom_preset(name, config)
         if not self.preset_key:

@@ -2,6 +2,7 @@ import os
 import sys
 import platform
 import logging
+import threading
 import requests
 from typing import Optional, Callable, Tuple
 
@@ -60,15 +61,19 @@ def format_time(seconds: float) -> str:
     m, s = divmod(int(seconds), 60)
     return f"{m:02d}:{s:02d}"
 
-def download_file(url,
-                  dest_path,
+def download_file(url: str, dest_path: str,
                   progress_callback: Optional[Callable[[int, int], None]] = None,
                   overwrite: bool = False,
-                  timeout: Tuple[int, int] = (10, 30)) -> bool:
+                  timeout: Tuple[int, int] = (10, 30),
+                  stop_event: Optional[threading.Event] = None) -> bool:
     """
     Scarica un file con timeout e callback di progresso.
+    Supporta l'interruzione anticipata tramite stop_event.
     Restituisce True se successo, False altrimenti.
     """
+    if stop_event and stop_event.is_set():
+        return False
+
     # Coerce types defensively — valori non-stringa (es. interi dal JSON) vengono
     # intercettati qui prima di causare errori nelle chiamate os.path.*
     if not isinstance(url, str):
@@ -98,6 +103,9 @@ def download_file(url,
             pass
 
     try:
+        if stop_event and stop_event.is_set():
+            return False
+
         response = requests.get(url, stream=True, timeout=timeout)
         response.raise_for_status()
         total_size = int(response.headers.get('content-length', 0))
@@ -114,6 +122,10 @@ def download_file(url,
                 f.write(content)
             else:
                 for chunk in response.iter_content(chunk_size=8192):
+                    if stop_event and stop_event.is_set():
+                        f.close()
+                        _cleanup_part()
+                        return False
                     if not chunk:
                         continue
                     downloaded += len(chunk)
@@ -145,3 +157,87 @@ def download_file(url,
         logger.error(f"Download fallito: {e}")
     _cleanup_part()
     return False
+
+
+def is_process_alive(pid: int) -> Optional[bool]:
+    """Return True (alive), False (confirmed exited), or None (unknown).
+
+    Permission and query failures must never authorize session deletion.
+    """
+    if pid <= 0:
+        return None
+    try:
+        if sys.platform == 'win32':
+            import ctypes
+            from ctypes import wintypes
+            kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+            kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel32.OpenProcess.restype = wintypes.HANDLE
+            kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+            kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+            kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+            kernel32.CloseHandle.restype = wintypes.BOOL
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            h_process = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if not h_process:
+                # ERROR_INVALID_PARAMETER: the requested PID does not exist.
+                return False if ctypes.get_last_error() == 87 else None
+            try:
+                exit_code = wintypes.DWORD()
+                if not kernel32.GetExitCodeProcess(h_process, ctypes.byref(exit_code)):
+                    return None
+                return exit_code.value == 259
+            finally:
+                kernel32.CloseHandle(h_process)
+        else:
+            os.kill(pid, 0)
+            return True
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return None
+    except Exception:
+        return None
+
+
+def cleanup_dead_sessions(temp_root: str, current_session: str) -> list:
+    """Remove only real session directories owned by a confirmed dead PID.
+
+    Legacy directories without a verifiable owner are preserved regardless of age.
+    Symlinks/junctions are never followed for cleanup.
+    """
+    import re
+    import stat
+    import shutil
+
+    root = os.path.realpath(temp_root)
+    current = os.path.normcase(os.path.realpath(current_session))
+    removed = []
+    with os.scandir(root) as entries:
+        for entry in entries:
+            if not entry.name.startswith('poluvr_session_'):
+                continue
+            try:
+                info = entry.stat(follow_symlinks=False)
+                if (not stat.S_ISDIR(info.st_mode) or entry.is_symlink()
+                        or getattr(info, 'st_file_attributes', 0) & 0x400):
+                    continue
+                path = os.path.realpath(entry.path)
+                if (os.path.normcase(os.path.dirname(path)) != os.path.normcase(root)
+                        or os.path.normcase(path) == current):
+                    continue
+                match = re.match(r'^poluvr_session_pid(\d+)_', entry.name)
+                owner_pid = int(match.group(1)) if match else None
+                if owner_pid is None:
+                    try:
+                        with open(os.path.join(path, 'session.pid'), encoding='utf-8') as f:
+                            value = f.readline().strip()
+                        owner_pid = int(value) if value.isdigit() else None
+                    except (OSError, ValueError):
+                        continue
+                if owner_pid is not None and is_process_alive(owner_pid) is False:
+                    shutil.rmtree(path)
+                    removed.append(path)
+            except OSError as error:
+                logger.warning('Could not clean session %s: %s', entry.name, error)
+    return removed

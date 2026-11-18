@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 import tempfile
 import threading
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -27,6 +28,8 @@ class CliEventTests(unittest.TestCase):
                 root = Path(root)
                 audio = root / 'song.wav'
                 sf.write(audio, np.zeros((800, 2)), 8000)
+                second_audio = root / 'second-song.wav'
+                sf.write(second_audio, np.zeros((800, 2)), 8000)
                 (root / 'test.ckpt').touch()
                 model_manager = type('Manager', (), {
                     'models_dir': str(root), 'downloadable_models': {},
@@ -47,10 +50,14 @@ class CliEventTests(unittest.TestCase):
                 class FakeSeparator:
                     def __init__(self, **kwargs):
                         self.output_dir = kwargs['output_dir']
+                        self.model_instance = None
                         # Exercises GuiLogHandler, which used wx.CallAfter.
                         logging.getLogger('audio_separator').info('fake model initialized')
                     def load_model(self, **kwargs):
-                        pass
+                        # Match audio-separator's cached model: its writer keeps
+                        # the original directory unless the caller updates it.
+                        if self.model_instance is None:
+                            self.model_instance = SimpleNamespace(output_dir=self.output_dir)
                     def separate(self, path):
                         import sys
                         sys.stderr.write('50%| fake inference\n')
@@ -62,7 +69,7 @@ class CliEventTests(unittest.TestCase):
                             threading.current_thread().stop()
                             return []
                         name = Path(path).stem + '_(Vocals).wav'
-                        sf.write(Path(self.output_dir) / name, np.zeros((800, 2)), 8000)
+                        sf.write(Path(self.model_instance.output_dir) / name, np.zeros((800, 2)), 8000)
                         return [name]
 
                 def no_gui(*args, **kwargs):
@@ -83,7 +90,8 @@ class CliEventTests(unittest.TestCase):
                          patch.object(worker, 'ProgressEvent'), \
                          patch.object(worker, 'DoneEvent'), \
                          contextlib.redirect_stdout(output), contextlib.redirect_stderr(io.StringIO()):
-                        code = cli.run_cli(['-i', str(audio), '-m', 'test.ckpt',
+                        inputs = [str(audio), str(second_audio)] if outcome == 'success' else [str(audio)]
+                        code = cli.run_cli(['-i', *inputs, '-m', 'test.ckpt',
                                             '-o', str(root / 'out'), '--bit-depth', '32'])
                     self.assertEqual(code, 0 if outcome == 'success' else 1)
                     self.assertEqual(len(contexts), 1)
@@ -91,7 +99,9 @@ class CliEventTests(unittest.TestCase):
                     self.assertIn('fake model initialized', output.getvalue())
                     self.assertIn('Progress: 50%', output.getvalue())
                     if outcome == 'success':
-                        self.assertIn('Generated 1 stem files', output.getvalue())
+                        self.assertIn('Generated 2 stem files', output.getvalue())
+                        for song in ('song', 'second-song'):
+                            self.assertEqual(len(list((root / 'out' / song).glob('*.wav'))), 1)
                     elif outcome == 'error':
                         self.assertIn('deliberate inference failure', output.getvalue())
                     else:

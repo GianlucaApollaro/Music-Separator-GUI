@@ -328,7 +328,7 @@ class SeparationThread(threading.Thread):
                     os.makedirs(file_output_dir, exist_ok=True)
                     if folder_name != base_input_name and not self.remove_leading_numbers:
                         self.post_log(i18n.tr("status_folder_collision", folder=base_input_name, new_folder=folder_name))
-                separator.output_dir = file_output_dir
+                self._set_output_dir(separator, file_output_dir)
 
 
                 if self.preset_config:
@@ -441,7 +441,7 @@ class SeparationThread(threading.Thread):
 
                         # Pass 1
                         self.post_log(i18n.tr("status_ensemble_start") + i18n.tr("log_pass", num=1, model=self.preset_config['model_1']))
-                        separator.output_dir = temp_dir_1
+                        self._set_output_dir(separator, temp_dir_1)
                         separator.load_model(model_filename=self.preset_config["model_1"])
                         old_stderr = sys.stderr
                         sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr, check_stop_func=lambda: self._stop_event.is_set())
@@ -458,7 +458,7 @@ class SeparationThread(threading.Thread):
                         # Pass 2
                         self.post_progress(0)
                         self.post_log(i18n.tr("status_ensemble_start") + i18n.tr("log_pass", num=2, model=self.preset_config['model_2']))
-                        separator.output_dir = temp_dir_2
+                        self._set_output_dir(separator, temp_dir_2)
                         separator.load_model(model_filename=self.preset_config["model_2"])
                         old_stderr = sys.stderr
                         sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr, check_stop_func=lambda: self._stop_event.is_set())
@@ -637,7 +637,7 @@ class SeparationThread(threading.Thread):
                             temp_dir = self._mkdtemp(f"chain_{step_num}_")
                             self.post_progress(0)
                             self.post_log(i18n.tr("status_ensemble_start") + i18n.tr("log_pass", num=step_num, model=model_file))
-                            separator.output_dir = temp_dir
+                            self._set_output_dir(separator, temp_dir)
                             separator.load_model(model_filename=model_file)
 
                             old_stderr = sys.stderr
@@ -915,7 +915,7 @@ class SeparationThread(threading.Thread):
 
                     # Pass 1
                     self.post_log(i18n.tr("status_ensemble_start") + i18n.tr("log_pass", num=1, model=self.model_name))
-                    separator.output_dir = temp_dir_1
+                    self._set_output_dir(separator, temp_dir_1)
                     separator.load_model(model_filename=self.model_name)
                     old_stderr = sys.stderr
                     sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr, check_stop_func=lambda: self._stop_event.is_set())
@@ -932,7 +932,7 @@ class SeparationThread(threading.Thread):
                     # Pass 2
                     self.post_progress(0)
                     self.post_log(i18n.tr("status_ensemble_start") + i18n.tr("log_pass", num=2, model=self.model_name_2))
-                    separator.output_dir = temp_dir_2
+                    self._set_output_dir(separator, temp_dir_2)
                     separator.load_model(model_filename=self.model_name_2)
                     old_stderr = sys.stderr
                     sys.stderr = TqdmCaptureStream(self.post_progress, old_stderr, check_stop_func=lambda: self._stop_event.is_set())
@@ -1289,6 +1289,16 @@ class SeparationThread(threading.Thread):
                     os.remove(safe_input_file)
             except Exception:
                 pass
+
+    @staticmethod
+    def _set_output_dir(separator, output_dir):
+        # audio-separator may reuse the loaded model, whose writer retains its
+        # own output directory. Keep both destinations in sync between songs
+        # and preset/ensemble passes without reloading the model.
+        separator.output_dir = output_dir
+        model_instance = getattr(separator, "model_instance", None)
+        if model_instance is not None:
+            model_instance.output_dir = output_dir
 
     def _mkdtemp(self, prefix):
         # Tracked so run()'s finally can remove leftovers when separation fails

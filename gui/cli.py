@@ -453,13 +453,13 @@ def run_cli(args_list: Optional[List[str]] = None) -> int:
         done_result["message"] = message
         done_result["files"] = files
 
-    # Create dummy parent context so AudioPatches and SeparationThread have model access
-    class CliParentContext:
+    # Keep model access separate from the GUI event recipient (CLI has no wx app).
+    class CliModelContext:
         def __init__(self, mm):
             self.model_manager = mm
             self.downloadable_models = mm.downloadable_models
 
-    context = CliParentContext(model_manager)
+    context = CliModelContext(model_manager)
 
     worker = SeparationThread(
         parent=None,
@@ -484,11 +484,9 @@ def run_cli(args_list: Optional[List[str]] = None) -> int:
         bitrate=args.bitrate,
         on_progress=progress_tracker.on_progress,
         on_log=progress_tracker.on_log,
-        on_done=_on_done
+        on_done=_on_done,
+        model_context=context
     )
-
-    # Attach context to worker parent reference for patcher
-    worker.parent = context
 
     # Start worker and handle Ctrl+C cleanly
     worker.start()

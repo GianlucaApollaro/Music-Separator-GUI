@@ -18,6 +18,7 @@ from gui.audio_utils import stem_from_filename, blend_audio, get_model_stems, st
 from gui.utils import cleanup_dead_sessions
 
 class TqdmCaptureStream:
+    """Forward progress to the worker; its post methods marshal GUI events."""
     def __init__(self, notify_func, original_stream, check_stop_func=None):
         self.notify_func = notify_func
         self.original_stream = original_stream
@@ -41,7 +42,7 @@ class TqdmCaptureStream:
                 if val != self.last_val:
                     self.last_val = val
                     if self.notify_func:
-                        wx.CallAfter(self.notify_func, val)
+                        self.notify_func(val)
                 
     def flush(self):
         if self.original_stream:
@@ -53,6 +54,7 @@ class TqdmCaptureStream:
 from gui.events import EVT_LOG_ID, EVT_DONE_ID, EVT_PROGRESS_ID, ProgressEvent, LogEvent, DoneEvent
 
 class GuiLogHandler(logging.Handler):
+    """Forward logs directly, including when no wx application is running."""
     def __init__(self, check_stop_func=None, notify_func=None):
         super().__init__()
         self.check_stop_func = check_stop_func
@@ -61,7 +63,7 @@ class GuiLogHandler(logging.Handler):
     def emit(self, record):
         msg = self.format(record)
         if self.notify_func:
-            wx.CallAfter(self.notify_func, msg)
+            self.notify_func(msg)
         
         # Check if we should abort (hacky way to interrupt logging if needed, 
         # normally separation is blocking, so we can't easily stop it mid-process 
@@ -70,9 +72,11 @@ class GuiLogHandler(logging.Handler):
             raise KeyboardInterrupt("Stopped by user")
 
 class SeparationThread(threading.Thread):
-    def __init__(self, parent, input_files, output_dir, model_name, use_gpu=True, output_format="WAV", model_name_2=None, model_name_3=None, model_name_4=None, model_name_5=None, preset_config=None, ensemble_algorithm="avg_wave", chunk_duration=None, remove_leading_numbers=False, use_subfolder=True, delete_silent_stems=False, silent_stem_threshold=-50.0, enable_preview=False, preview_mode="first", bit_depth=None, bitrate=None, on_progress=None, on_log=None, on_done=None):
+    def __init__(self, parent, input_files, output_dir, model_name, use_gpu=True, output_format="WAV", model_name_2=None, model_name_3=None, model_name_4=None, model_name_5=None, preset_config=None, ensemble_algorithm="avg_wave", chunk_duration=None, remove_leading_numbers=False, use_subfolder=True, delete_silent_stems=False, silent_stem_threshold=-50.0, enable_preview=False, preview_mode="first", bit_depth=None, bitrate=None, on_progress=None, on_log=None, on_done=None, model_context=None):
         super().__init__()
         self.parent = parent
+        # Model registry access is independent of the optional wx event recipient.
+        self.model_context = model_context if model_context is not None else parent
         self.on_progress = on_progress
         self.on_log = on_log
         self.on_done = on_done
@@ -182,7 +186,7 @@ class SeparationThread(threading.Thread):
             # Custom model support is implemented in gui/audio_patches.py (AudioPatches).
             from gui.audio_patches import AudioPatches
 
-            patcher = AudioPatches(model_dir=model_dir, parent=self.parent, log=self.post_log)
+            patcher = AudioPatches(model_dir=model_dir, parent=self.model_context, log=self.post_log)
             try:
                 patcher.apply(separator)
             except Exception as patch_err:

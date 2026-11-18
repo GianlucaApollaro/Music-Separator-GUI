@@ -38,6 +38,14 @@ class CliEventTests(unittest.TestCase):
                 })()
                 model_manager._ready_event.set()
                 contexts = []
+                session_dirs = []
+                original_mkdtemp = tempfile.mkdtemp
+
+                def track_session_dir(*args, **kwargs):
+                    kwargs['dir'] = str(root)
+                    path = original_mkdtemp(*args, **kwargs)
+                    session_dirs.append(Path(path))
+                    return path
 
                 class FakePatches:
                     def __init__(self, model_dir, parent, log):
@@ -83,6 +91,7 @@ class CliEventTests(unittest.TestCase):
                          patch.object(worker, 'Separator', FakeSeparator), \
                          patch('gui.audio_patches.AudioPatches', FakePatches), \
                          patch.object(worker, 'cleanup_dead_sessions'), \
+                         patch.object(worker.tempfile, 'mkdtemp', side_effect=track_session_dir), \
                          patch.object(worker.subprocess, 'run', side_effect=OSError('conversion unavailable in unit test')), \
                          patch.object(wx, 'PostEvent', side_effect=no_gui), \
                          patch.object(wx, 'CallAfter', side_effect=no_gui), \
@@ -94,6 +103,9 @@ class CliEventTests(unittest.TestCase):
                         code = cli.run_cli(['-i', *inputs, '-m', 'test.ckpt',
                                             '-o', str(root / 'out'), '--bit-depth', '32'])
                     self.assertEqual(code, 0 if outcome == 'success' else 1)
+                    self.assertTrue(session_dirs)
+                    self.assertTrue(all(not path.exists() for path in session_dirs),
+                                    'Worker left temporary session directories behind')
                     self.assertEqual(len(contexts), 1)
                     self.assertIs(contexts[0].model_manager, model_manager)
                     self.assertIn('fake model initialized', output.getvalue())

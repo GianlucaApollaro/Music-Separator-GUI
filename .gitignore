@@ -81,3 +81,11 @@ graphify-out/
 
 # PDF Documents
 *.pdf
+
+# Test Environment
+venv_test/
+test_inworld/
+install_test.bat
+run_test.bat
+venv_baseline_versions.txt
+venv_test_versions.txt

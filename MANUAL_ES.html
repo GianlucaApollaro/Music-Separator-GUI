@@ -209,7 +209,7 @@
     <div class="container">
         <header>
             <h1>Music Separator</h1>
-            <p>Manual de Usuario - v1.8</p>
+            <p>Manual de Usuario - v1.9</p>
         </header>
 
         <div class="download-box">
@@ -222,7 +222,7 @@
             <h3>Índice de Contenidos</h3>
             <ul class="index-list">
                 <li><a href="#installation">1. Instalación</a></li>
-                <li><a href="#new-features">2. Novedades en la v1.8</a></li>
+                <li><a href="#new-features">2. Novedades en la v1.9</a></li>
                 <li><a href="#basic-usage">3. Uso Básico (Modelo Único)</a></li>
                 <li><a href="#ensemble">4. Native Ensemble</a></li>
                 <li><a href="#presets">5. Preajustes en Cadena y Personalizados</a></li>
@@ -265,8 +265,18 @@
         </section>
 
         <section id="new-features">
-            <h2>2. Novedades en la v1.8 <span class="badge">Nuevo</span></h2>
+            <h2>2. Novedades en la v1.9 <span class="badge">Nuevo</span></h2>
             <div class="card">
+                <ul>
+                    <li><strong>10 Nuevos Modelos de IA en el Catálogo:</strong> Integrados <code>BS-Roformer BowedStrings v2</code> y <code>Drums v1</code> (Gilliaan), <code>BS-Roformer Leap</code> y <code>Leap Xe</code> Vocals/Instrumental (Unwa), <code>Mel-Band RoFormer Invert Clean</code> y <code>BS-Roformer Delimit</code> (Becruily), y <code>SCNet XL v5</code> y <code>SCNet XL IHF Masked</code> (ZFTurbo).</li>
+                    <li><strong>Preajuste Ultimate Stems + Drum Split Actualizado:</strong> El Paso 1 ahora utiliza <code>BS-Roformer BowedStrings v2</code> para una extracción de cuerdas más limpia y precisa.</li>
+                    <li><strong>Motor de Separación Actualizado (<code>audio-separator 0.47.0</code>):</strong> Mejor gestión del overlap y mayor fidelidad de separación.</li>
+                    <li><strong>Corrección Crítica de Distorsión en Segmentación WAV 32-bit Float:</strong> Resuelto el problema de audio distorsionado cuando el Chunking estaba activado en MP3 u otros archivos convertidos a WAV 32-bit float (<code>WAVE_FORMAT_EXTENSIBLE</code>), preservando los fragmentos en 32-bit float bit-perfect mediante <code>soundfile</code>.</li>
+                    <li><strong>Correcciones en CLI Headless y Enrutamiento por Lotes con Caché (PR #13):</strong> Corregidos los callbacks CLI sin bucle de eventos wxPython y sincronizada la carpeta de salida del modelo en caché entre pistas consecutivas por lotes y pasadas de preajustes/ensemble.</li>
+                    <li><strong>Transiciones entre Modelos Más Rápidas y Gestión de Memoria Optimizada:</strong> Caché selectiva para bifurcaciones, movimiento directo de archivos sin copias innecesarias, liberación proactiva de RAM/VRAM al cambiar de modelo y reutilización en lotes.</li>
+                    <li><strong>Estabilidad y Post-Mix:</strong> Corregida la detección de modelos MDX23C (como DrumSep) con YAML personalizados, soporte completo de tuplas YAML, protección frente a colisiones en post-mix y mejor distinción entre errores y cancelaciones del usuario.</li>
+                </ul>
+                <p>Características introducidas en la versión v1.8:</p>
                 <ul>
                     <li><strong>Soporte de Formatos de Audio AIFF y ALAC (Apple Lossless):</strong> Pieno soporte para abrir y escanear por lotes archivos <code>.aiff</code> y <code>.aif</code>, además de opciones de exportación profesional sin compresión en AIFF (16-bit, 24-bit, 32-bit Float) y comprimido sin pérdida en Apple Lossless ALAC (16-bit y 24-bit en contenedor <code>.m4a</code>), asegurando máxima fidelidad y compatibilidad con Logic Pro y el entorno Apple.</li>
                     <li><strong>Preajustes Personalizados con Cadenas Ramificadas (Flujos en Árbol / Bifurcaciones):</strong> Los preajustes personalizados ahora admiten cadenas no lineales. A partir del paso 2 puedes seleccionar cualquier stem generado en pasos previos o el audio original como fuente, detener una rama con <em>"Ninguno (fin de esta rama)"</em> y guardar o renombrar libremente los stems producidos en cada paso.</li>

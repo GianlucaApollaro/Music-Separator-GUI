@@ -1,6 +1,6 @@
 ===============================================================================
                        MUSIC SEPARATOR - MANUALE UTENTE                       
-                       MANUALE ITALIANO (IT) - v1.8
+                       MANUALE ITALIANO (IT) - v1.9
 ===============================================================================
 
 Benvenuto in Music separator, un potente strumento per la separazione audio 
@@ -29,8 +29,36 @@ macOS (Apple Silicon M1/M2/M3/M4):
 - NOTA: FFmpeg e' incluso nel pacchetto. In caso di blocchi di sicurezza, 
   consulta il README per le istruzioni sul comando 'xattr'.
 
-2. NOVITÀ nella v1.8
+2. NOVITÀ nella v1.9
 -------------------------------------------------------------------------------
+- 10 Nuovi Modelli AI nel Catalogo:
+  * BS-Roformer BowedStrings v2 (Gilliaan): nuovo modello ad alta precisione per gli archi.
+  * BS-Roformer Drums v1 (Gilliaan): modello BS-RoFormer dedicato all'estrazione della batteria.
+  * BS-Roformer Leap & Leap Xe (Vocals e Instrumental, Unwa): nuova generazione di modelli vocali e strumentali.
+  * Mel-Band RoFormer Invert Clean (Becruily): pulitore specialistico per acapella ottenute tramite inversione di fase.
+  * BS-Roformer Delimit (Becruily): de-limiter per rimuovere la distorsione da brickwall limiter e ripristinare la dinamica.
+  * SCNet XL v5 e SCNet XL IHF Masked (ZFTurbo): nuovi modelli 4-stem ad alto SDR.
+- Preset Ultimate Stems + Drum Split Aggiornato: Il Passaggio 1 utilizza ora il nuovo
+  modello BS-Roformer BowedStrings v2 per un'estrazione degli archi ancora più pulita.
+- Motore di Separazione Aggiornato (audio-separator 0.47.0): Migliore gestione
+  dell'overlap e della qualità audio complessiva.
+- Correzione Critica Distorsione con Chunking WAV 32-bit Float: Risolto il problema
+  di audio fortemente distorto quando l'opzione Chunking era attiva su MP3 o altri file
+  convertiti in WAV 32-bit float (WAVE_FORMAT_EXTENSIBLE), preservando i chunk in
+  formato float 32-bit bit-perfect tramite soundfile.
+- Correzione Modalità CLI Headless e Batch con Modello in Cache (PR #13):
+  * Risolti i callback in modalità CLI senza loop eventi wxPython.
+  * Sincronizzata correttamente la cartella di output del modello in cache tra tracce
+    consecutive in batch e tra i passaggi di preset/ensemble.
+- Transizioni tra Modelli Più Veloci e Gestione Memoria Ottimizzata: Cache selettiva
+  solo degli stem effettivamente usati nelle diramazioni, spostamento diretto dei file
+  (senza copie inutili), rilascio immediato di RAM/VRAM al cambio modello e riuso del
+  modello tra brani consecutivi.
+- Stabilità e Post-Mix: Risolto il rilevamento dei modelli MDX23C (come DrumSep) con
+  YAML personalizzati, migliorata la lettura dei file YAML con tuple Python, protetti
+  i post-mix da collisioni di nomi e migliorata la distinzione tra errori e annullamenti.
+
+NOVITÀ nella v1.8:
 - Supporto Formati Audio AIFF e ALAC (Apple Lossless):
   * Apertura e scansione batch di file .aiff e .aif sia da GUI che da riga di comando.
   * Esportazione nei formati AIFF (16-bit, 24-bit, 32-bit Float) e ALAC Apple Lossless in contenitore .m4a (16-bit e 24-bit), garantendo la massima fedelta' audio e la perfetta integrazione con l'ecosistema Apple e professionale.

@@ -79,6 +79,18 @@ def get_model_stems(model_name: str) -> List[str]:
     if "bowedstrings" in model_lower or "bowed_strings" in model_lower or "bowed strings" in model_lower or "gilliaan_bowedstrings" in model_lower:
         return ["strings", "other"]
 
+    if "gilliaan_bsroformer_drums" in model_lower or ("drums_v1" in model_lower and "gilliaan" in model_lower):
+        return ["drums", "other"]
+
+    if "invert_clean" in model_lower or "invert clean" in model_lower:
+        return ["clean", "noise"]
+
+    if "delimit" in model_lower:
+        return ["delimited", "other"]
+
+    if "scnet" in model_lower:
+        return ["vocals", "drums", "bass", "other"]
+
     if "duet" in model_lower or "7.9319" in model_lower or "duet_dual" in model_lower:
         return ["singer_1", "singer_2"]
 
@@ -106,6 +118,7 @@ SYNONYM_GROUPS = [
     {"dry", "denoise", "dereverb", "noreverb", "no_reverb", "clean", "no_noise", "nonoise", "lead", "vocals"},
     {"other", "instrumental", "noise", "reverb", "no_dry", "nodry", "bleed", "extra"},
     {"hh", "hi-hat", "hihat"},
+    {"toms", "tom-toms", "tom"},
     {"crash", "ride", "cymbals"},
     {"male", "vocals"},
     {"female", "other"}

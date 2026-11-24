@@ -32,7 +32,9 @@ class ModelManager:
                 "mel_band_roformer_karaoke_becruily.ckpt",
                 "mel_band_roformer_vocals_becruily.ckpt",
                 "mel_band_roformer_instrumental_becruily.ckpt",
-                "mel_band_roformer_denoise_debleed_gabox.ckpt"
+                "mel_band_roformer_denoise_debleed_gabox.ckpt",
+                "becruily_invert_clean.ckpt",
+                "becruily_delimit.ckpt"
             ],
             "De-Reverb / De-Echo": [
                 "dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt",
@@ -52,7 +54,8 @@ class ModelManager:
                 "UVR-MDX-NET_Crowd_HQ_1.onnx"
             ],
             "Drum Separation": [
-                "MDX23C-DrumSep-aufr33-jarredou.ckpt"
+                "MDX23C-DrumSep-aufr33-jarredou.ckpt",
+                "gilliaan_bsroformer_drums_v1.ckpt"
             ],
             "Aspiration / Breath Elements": [
                 "aspiration_mel_band_roformer_sdr_18.9845.ckpt"
@@ -73,6 +76,10 @@ class ModelManager:
                 "last_bs_roformer.ckpt"
             ],
             "Unwa Custom Models (High Quality)": [
+                "bs_roformer_leap_voc.ckpt",
+                "bs_roformer_leap_inst.ckpt",
+                "bs_leap_xe_voc.ckpt",
+                "bs_leap_xe_inst.ckpt",
                 "bs_large_v2_inst.ckpt",
                 "bs_roformer_inst_hyperacev2.ckpt",
                 "bs_roformer_voc_hyperacev2.ckpt",
@@ -96,10 +103,13 @@ class ModelManager:
             ],
             "Multi-Stem Models": [
                 "bs_roformer_multistem.safetensors",
-                "mvsep_mega_model_bs_roformer_53_stems_v1.ckpt"
+                "mvsep_mega_model_bs_roformer_53_stems_v1.ckpt",
+                "model_scnet_ep_36_sdr_10.0891.ckpt",
+                "model_scnet_masked_ep_111_sdr_9.8286.ckpt"
             ],
             "Specialized Instrument Models": [
                 "gilliaan_bowedstrings_bs_v1.ckpt",
+                "gilliaan_bsroformer_bowedstrings_v2.ckpt",
                 "model_bs_roformer_ep_1_sdr_4.9869_fixed.ckpt",
                 "mel_band_roformer_guitar_becruily.ckpt"
             ],
@@ -494,6 +504,93 @@ class ModelManager:
         self.downloadable_aliases["lead_synth"] = synth_info
         self.downloadable_aliases["synth"] = synth_info
         self.downloadable_aliases["synth_lead"] = synth_info
+
+        # -----------------------------------------------------------------------
+        # Gilliaan BowedStrings v2 & Drums v1 (gilliaan/Stem-Separation-Models)
+        # -----------------------------------------------------------------------
+        _gilliaan_base = "https://huggingface.co/gilliaan/Stem-Separation-Models/resolve/main/"
+        bowed_strings_v2_info = {
+            "gilliaan_bsroformer_bowedstrings_v2.ckpt": _gilliaan_base + "BowedStrings/BandSplitRoformer/gilliaan_bsroformer_bowedstrings_v2.ckpt",
+            "gilliaan_bsroformer_bowedstrings_v2.yaml": _gilliaan_base + "BowedStrings/BandSplitRoformer/gilliaan_bsroformer_bowedstrings_v2.yaml",
+        }
+        self.downloadable_models["Roformer Model: BS-Roformer BowedStrings v2 | (by gilliaan)"] = bowed_strings_v2_info
+        self.downloadable_models_by_file["gilliaan_bsroformer_bowedstrings_v2.ckpt"] = bowed_strings_v2_info
+        self.downloadable_aliases["bowed_strings_v2"] = bowed_strings_v2_info
+        self.downloadable_aliases["bowedstrings_v2"] = bowed_strings_v2_info
+        self.downloadable_aliases["archi_v2"] = bowed_strings_v2_info
+
+        gilliaan_drums_v1_info = {
+            "gilliaan_bsroformer_drums_v1.ckpt": _gilliaan_base + "Drums/BandSplitRoformer/gilliaan_bsroformer_drums_v1.ckpt",
+            "gilliaan_bsroformer_drums_v1.yaml": _gilliaan_base + "Drums/BandSplitRoformer/gilliaan_bsroformer_drums_v1.yaml",
+        }
+        self.downloadable_models["Roformer Model: BS-Roformer Drums v1 | (by gilliaan)"] = gilliaan_drums_v1_info
+        self.downloadable_models_by_file["gilliaan_bsroformer_drums_v1.ckpt"] = gilliaan_drums_v1_info
+
+        # -----------------------------------------------------------------------
+        # Unwa BS-Roformer Leap & Leap Xe (pcunwa/BS-Roformer-Leap)
+        # -----------------------------------------------------------------------
+        _unwa_leap_base = "https://huggingface.co/pcunwa/BS-Roformer-Leap/resolve/main/"
+        leap_voc_info = {
+            "bs_roformer_leap_voc.ckpt": _unwa_leap_base + "bs_roformer_leap_voc.ckpt",
+            "bs_leap_voc_conf.yaml": _unwa_leap_base + "bs_leap_voc_conf.yaml",
+        }
+        self.downloadable_models["Roformer Model: BS-Roformer Leap Vocals | (by unwa)"] = leap_voc_info
+        self.downloadable_models_by_file["bs_roformer_leap_voc.ckpt"] = leap_voc_info
+
+        leap_inst_info = {
+            "bs_roformer_leap_inst.ckpt": _unwa_leap_base + "bs_roformer_leap_inst.ckpt",
+            "bs_leap_inst_conf.yaml": _unwa_leap_base + "bs_leap_inst_conf.yaml",
+        }
+        self.downloadable_models["Roformer Model: BS-Roformer Leap Instrumental | (by unwa)"] = leap_inst_info
+        self.downloadable_models_by_file["bs_roformer_leap_inst.ckpt"] = leap_inst_info
+
+        leap_xe_voc_info = {
+            "bs_leap_xe_voc.ckpt": _unwa_leap_base + "Xe/bs_leap_xe_voc.ckpt",
+            "leap_xe_config_voc.yaml": _unwa_leap_base + "Xe/leap_xe_config_voc.yaml",
+        }
+        self.downloadable_models["Roformer Model: BS-Roformer Leap Xe Vocals | (by unwa)"] = leap_xe_voc_info
+        self.downloadable_models_by_file["bs_leap_xe_voc.ckpt"] = leap_xe_voc_info
+
+        leap_xe_inst_info = {
+            "bs_leap_xe_inst.ckpt": _unwa_leap_base + "Xe/bs_leap_xe_inst.ckpt",
+            "leap_xe_config_inst.yaml": _unwa_leap_base + "Xe/leap_xe_config_inst.yaml",
+        }
+        self.downloadable_models["Roformer Model: BS-Roformer Leap Xe Instrumental | (by unwa)"] = leap_xe_inst_info
+        self.downloadable_models_by_file["bs_leap_xe_inst.ckpt"] = leap_xe_inst_info
+
+        # -----------------------------------------------------------------------
+        # Becruily Invert Clean & Delimit
+        # -----------------------------------------------------------------------
+        becruily_invert_clean_info = {
+            "becruily_invert_clean.ckpt": "https://huggingface.co/becruily/mel-band-roformer-invert-clean/resolve/main/becruily_invert_clean.ckpt",
+            "config_becruily_invert_clean.yaml": "https://huggingface.co/becruily/mel-band-roformer-invert-clean/resolve/main/config_becruily_invert_clean.yaml",
+        }
+        self.downloadable_models["Roformer Model: MelBand Roformer Invert Clean | (by becruily)"] = becruily_invert_clean_info
+        self.downloadable_models_by_file["becruily_invert_clean.ckpt"] = becruily_invert_clean_info
+
+        becruily_delimit_info = {
+            "becruily_delimit.ckpt": "https://huggingface.co/becruily/bs-roformer-delimit/resolve/main/becruily_delimit.ckpt",
+            "config_becruily_delimit.yaml": "https://huggingface.co/becruily/bs-roformer-delimit/resolve/main/config_becruily_delimit.yaml",
+        }
+        self.downloadable_models["Roformer Model: BS-Roformer Delimit | (by becruily)"] = becruily_delimit_info
+        self.downloadable_models_by_file["becruily_delimit.ckpt"] = becruily_delimit_info
+
+        # -----------------------------------------------------------------------
+        # ZFTurbo SCNet XL IHF & SCNet Masked XL IHF (4 stems: drums, bass, other, vocals)
+        # -----------------------------------------------------------------------
+        scnet_xl_ihf_info = {
+            "model_scnet_ep_36_sdr_10.0891.ckpt": "https://github.com/ZFTurbo/Music-Source-Separation-Training/releases/download/v1.0.15/model_scnet_ep_36_sdr_10.0891.ckpt",
+            "config_musdb18_scnet_xl_more_wide_v5.yaml": "https://github.com/ZFTurbo/Music-Source-Separation-Training/releases/download/v1.0.15/config_musdb18_scnet_xl_more_wide_v5.yaml",
+        }
+        self.downloadable_models["SCNet Model: SCNet XL IHF | (by ZFTurbo)"] = scnet_xl_ihf_info
+        self.downloadable_models_by_file["model_scnet_ep_36_sdr_10.0891.ckpt"] = scnet_xl_ihf_info
+
+        scnet_masked_ihf_info = {
+            "model_scnet_masked_ep_111_sdr_9.8286.ckpt": "https://github.com/ZFTurbo/Music-Source-Separation-Training/releases/download/v1.0.17/model_scnet_masked_ep_111_sdr_9.8286.ckpt",
+            "config_musdb18_scnet_xl_ihf.yaml": "https://github.com/ZFTurbo/Music-Source-Separation-Training/releases/download/v1.0.17/config_musdb18_scnet_xl_ihf.yaml",
+        }
+        self.downloadable_models["SCNet Model: SCNet Masked XL IHF | (by ZFTurbo)"] = scnet_masked_ihf_info
+        self.downloadable_models_by_file["model_scnet_masked_ep_111_sdr_9.8286.ckpt"] = scnet_masked_ihf_info
 
         # Demucs aliases to help resolve and download
         self.downloadable_aliases["htdemucs"] = {"htdemucs.yaml": ""}

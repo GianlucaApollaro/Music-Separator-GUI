@@ -77,7 +77,7 @@ class PresetManager:
         },
         "preset_ultimate_drums": {
             "type": "chain",
-            "model_1": "gilliaan_bowedstrings_bs_v1.ckpt",
+            "model_1": "gilliaan_bsroformer_bowedstrings_v2.ckpt",
             "model_2": "bs_roformer_karaoke_frazer_becruily.ckpt",
             "model_3": "mel_band_roformer_becruily_deux.ckpt",
             "model_4": "BS-Roformer-SW.ckpt",
@@ -88,7 +88,8 @@ class PresetManager:
             "pass_stem_4": "drums",
             "m1_gain_db": -3.0,
             "m1_rename_map": {
-                "strings": "_Strings"
+                "strings": "_Strings",
+                "other": None
             },
             "m2_keep_name": "_Lead",
             "m3_keep_pass_stem_name": "_Instrumental_No_Strings",
@@ -108,7 +109,9 @@ class PresetManager:
                 "kick": "_Kick",
                 "snare": "_Snare",
                 "hi-hat": "_Hi-Hat",
-                "cymbals": "_Cymbals",
+                "ride": "_Ride",
+                "crash": "_Crash",
+                "toms": "_Toms",
                 "tom-toms": "_Toms",
                 "other": "_Drums_Other"
             },
@@ -117,6 +120,11 @@ class PresetManager:
                     "stems": ["_Strings", "_Instrumental_No_Strings"],
                     "output": "_Instrumental",
                     "delete_sources": ["_Instrumental_No_Strings"]
+                },
+                {
+                    "stems": ["_Ride", "_Crash"],
+                    "output": "_Cymbals",
+                    "delete_sources": ["_Ride", "_Crash"]
                 }
             ]
         },

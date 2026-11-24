@@ -1,7 +1,7 @@
 import sys
 import os
 
-__version__ = "1.8"
+__version__ = "1.9"
 
 def get_edition() -> str:
     """Return 'Mac', 'Windows_CPU', 'Windows_GPU', or 'Unknown' based on platform and executable name."""

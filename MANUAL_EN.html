@@ -209,7 +209,7 @@
     <div class="container">
         <header>
             <h1>Music Separator</h1>
-            <p>User Manual - v1.8</p>
+            <p>User Manual - v1.9</p>
         </header>
 
         <div class="download-box">
@@ -222,7 +222,7 @@
             <h3>Table of Contents</h3>
             <ul class="index-list">
                 <li><a href="#installation">1. Installation</a></li>
-                <li><a href="#new-features">2. What's New in v1.8</a></li>
+                <li><a href="#new-features">2. What's New in v1.9</a></li>
                 <li><a href="#basic-usage">3. Basic Usage (Single Model)</a></li>
                 <li><a href="#ensemble">4. Native Ensemble</a></li>
                 <li><a href="#presets">5. Chained Presets &amp; Custom Presets</a></li>
@@ -265,8 +265,18 @@
         </section>
 
         <section id="new-features">
-            <h2>2. What's New in v1.8 <span class="badge">New</span></h2>
+            <h2>2. What's New in v1.9 <span class="badge">New</span></h2>
             <div class="card">
+                <ul>
+                    <li><strong>10 New AI Models Added to the Catalog:</strong> Integrated <code>BS-Roformer BowedStrings v2</code> &amp; <code>Drums v1</code> (Gilliaan), <code>BS-Roformer Leap</code> &amp; <code>Leap Xe</code> Vocals/Instrumental (Unwa), <code>Mel-Band RoFormer Invert Clean</code> &amp; <code>BS-Roformer Delimit</code> (Becruily), and <code>SCNet XL v5</code> &amp; <code>SCNet XL IHF Masked</code> (ZFTurbo).</li>
+                    <li><strong>Upgraded Ultimate Stems + Drum Split Preset:</strong> Pass 1 now uses <code>BS-Roformer BowedStrings v2</code> for cleaner, higher-precision bowed strings extraction.</li>
+                    <li><strong>Upgraded Core Engine (<code>audio-separator 0.47.0</code>):</strong> Improved overlap processing and separation fidelity.</li>
+                    <li><strong>Critical 32-bit Float WAV Chunking Distortion Fix:</strong> Fixed severe distortion when chunking was enabled on MP3 and other audio files converted to 32-bit float WAV (<code>WAVE_FORMAT_EXTENSIBLE</code>), preserving bit-perfect 32-bit float chunks via <code>soundfile</code>.</li>
+                    <li><strong>Headless CLI &amp; Cached-Model Batch Routing Fixes (PR #13):</strong> Fixed CLI callbacks without a wxPython event loop and synchronized cached model output directories across consecutive batch tracks and preset/ensemble passes.</li>
+                    <li><strong>Faster Inter-Model Transitions &amp; Memory Optimization:</strong> Selective branch stem caching, zero-copy file moves instead of redundant copies, proactive RAM/VRAM cleanup before loading a new model, and cached model reuse across batch files.</li>
+                    <li><strong>Stability &amp; Post-Mix Hardening:</strong> Fixed MDX23C (e.g. DrumSep) YAML architecture detection, full YAML tuple loader support, safer post-mix collision/partial-read handling, and clearer error vs. user cancellation reporting.</li>
+                </ul>
+                <p>Features introduced in v1.8:</p>
                 <ul>
                     <li><strong>AIFF &amp; Apple Lossless (ALAC) Formats Support:</strong> Full support for opening and batch-processing <code>.aiff</code> and <code>.aif</code> audio files, plus high-fidelity export options in uncompressed AIFF (16-bit, 24-bit, 32-bit Float) and compressed Apple Lossless ALAC (16-bit and 24-bit in <code>.m4a</code> container), perfectly tailored for Logic Pro, Final Cut, and Apple ecosystems.</li>
                     <li><strong>Branched &amp; Tree-Structured Custom Presets (Fork / Tree Pipelines):</strong> Custom presets now support non-linear chains. Starting from step 2, you can select any stem generated in earlier passes or the original input as your audio source, stop a branch with <em>"None (end of this branch)"</em>, and independently save and rename stems produced at any step.</li>

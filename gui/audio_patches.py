@@ -55,8 +55,18 @@ CUSTOM_CKPT_TO_YAML = {
     'bs_roformer_multistem.safetensors':                'bs_roformer_multistem_config.yaml',
     # MVSep Mega 53 Stems model
     'mvsep_mega_model_bs_roformer_53_stems_v1.ckpt':    'mvsep_mega_model_bs_roformer_53_stems.yaml',
-    # Gilliaan BowedStrings model
+    # Gilliaan BowedStrings & Drums models
     'gilliaan_bowedstrings_bs_v1.ckpt':                 'gilliaan_bsroformer_bowedstrings_v1.yaml',
+    'gilliaan_bsroformer_bowedstrings_v2.ckpt':         'gilliaan_bsroformer_bowedstrings_v2.yaml',
+    'gilliaan_bsroformer_drums_v1.ckpt':                'gilliaan_bsroformer_drums_v1.yaml',
+    # Unwa BS-Roformer Leap & Leap Xe models
+    'bs_roformer_leap_voc.ckpt':                        'bs_leap_voc_conf.yaml',
+    'bs_roformer_leap_inst.ckpt':                       'bs_leap_inst_conf.yaml',
+    'bs_leap_xe_voc.ckpt':                              'leap_xe_config_voc.yaml',
+    'bs_leap_xe_inst.ckpt':                             'leap_xe_config_inst.yaml',
+    # Becruily Invert Clean & Delimit models
+    'becruily_invert_clean.ckpt':                       'config_becruily_invert_clean.yaml',
+    'becruily_delimit.ckpt':                            'config_becruily_delimit.yaml',
     # DryPaintMan MelBand-Roformer Duet model
     'model_mel_band_roformer_ep_0_sdr_7.9319_fixed.ckpt': 'config_mel_band_roformer_duet_dual-mlp2.yaml',
     # Lead Synth BS-Roformer model
@@ -68,6 +78,8 @@ CUSTOM_CKPT_TO_YAML = {
     'SCNet-large_starrytong_fixed.ckpt':               'config_musdb18_scnet_large_starrytong.yaml',
     'model_scnet_sdr_9.3244.ckpt':                      'config_musdb18_scnet_large.yaml',
     'model_scnet_ep_54_sdr_9.8051.ckpt':                'config_musdb18_scnet_xl.yaml',
+    'model_scnet_ep_36_sdr_10.0891.ckpt':               'config_musdb18_scnet_xl_more_wide_v5.yaml',
+    'model_scnet_masked_ep_111_sdr_9.8286.ckpt':        'config_musdb18_scnet_xl_ihf.yaml',
 }
 
 CUSTOM_MDXC_MODELS = {
@@ -137,6 +149,86 @@ CUSTOM_MDXC_MODELS = {
         ],
         "is_roformer": True
     },
+    "Roformer Model: BS-Roformer BowedStrings v2 | (by gilliaan)": {
+        "filename": "gilliaan_bsroformer_bowedstrings_v2.ckpt",
+        "download_files": [
+            "gilliaan_bsroformer_bowedstrings_v2.ckpt",
+            "gilliaan_bsroformer_bowedstrings_v2.yaml"
+        ],
+        "is_roformer": True
+    },
+    "Roformer Model: BS-Roformer Drums v1 | (by gilliaan)": {
+        "filename": "gilliaan_bsroformer_drums_v1.ckpt",
+        "download_files": [
+            "gilliaan_bsroformer_drums_v1.ckpt",
+            "gilliaan_bsroformer_drums_v1.yaml"
+        ],
+        "is_roformer": True
+    },
+    "Roformer Model: BS-Roformer Leap Vocals | (by unwa)": {
+        "filename": "bs_roformer_leap_voc.ckpt",
+        "download_files": [
+            "bs_roformer_leap_voc.ckpt",
+            "bs_leap_voc_conf.yaml"
+        ],
+        "is_roformer": True
+    },
+    "Roformer Model: BS-Roformer Leap Instrumental | (by unwa)": {
+        "filename": "bs_roformer_leap_inst.ckpt",
+        "download_files": [
+            "bs_roformer_leap_inst.ckpt",
+            "bs_leap_inst_conf.yaml"
+        ],
+        "is_roformer": True
+    },
+    "Roformer Model: BS-Roformer Leap Xe Vocals | (by unwa)": {
+        "filename": "bs_leap_xe_voc.ckpt",
+        "download_files": [
+            "bs_leap_xe_voc.ckpt",
+            "leap_xe_config_voc.yaml"
+        ],
+        "is_roformer": True
+    },
+    "Roformer Model: BS-Roformer Leap Xe Instrumental | (by unwa)": {
+        "filename": "bs_leap_xe_inst.ckpt",
+        "download_files": [
+            "bs_leap_xe_inst.ckpt",
+            "leap_xe_config_inst.yaml"
+        ],
+        "is_roformer": True
+    },
+    "Roformer Model: MelBand Roformer Invert Clean | (by becruily)": {
+        "filename": "becruily_invert_clean.ckpt",
+        "download_files": [
+            "becruily_invert_clean.ckpt",
+            "config_becruily_invert_clean.yaml"
+        ],
+        "is_roformer": True
+    },
+    "Roformer Model: BS-Roformer Delimit | (by becruily)": {
+        "filename": "becruily_delimit.ckpt",
+        "download_files": [
+            "becruily_delimit.ckpt",
+            "config_becruily_delimit.yaml"
+        ],
+        "is_roformer": True
+    },
+    "SCNet Model: SCNet XL IHF | (by ZFTurbo)": {
+        "filename": "model_scnet_ep_36_sdr_10.0891.ckpt",
+        "download_files": [
+            "model_scnet_ep_36_sdr_10.0891.ckpt",
+            "config_musdb18_scnet_xl_more_wide_v5.yaml"
+        ],
+        "is_roformer": True
+    },
+    "SCNet Model: SCNet Masked XL IHF | (by ZFTurbo)": {
+        "filename": "model_scnet_masked_ep_111_sdr_9.8286.ckpt",
+        "download_files": [
+            "model_scnet_masked_ep_111_sdr_9.8286.ckpt",
+            "config_musdb18_scnet_xl_ihf.yaml"
+        ],
+        "is_roformer": True
+    },
     "Roformer Model: MelBand-Roformer Duet | (by DryPaintMan)": {
         "filename": "model_mel_band_roformer_ep_0_sdr_7.9319_fixed.ckpt",
         "download_files": [
@@ -191,6 +283,7 @@ class AudioPatches:
             self._patch_roformer_loader(separator)
             self._patch_melband_mlp_factor()
             self._patch_parameter_validator()
+            self._patch_audio_chunker_and_pydub()
         except Exception as e:  # noqa: BLE001
             self.restore()
             raise RuntimeError(f"Runtime patch failed: {e}") from e
@@ -202,7 +295,8 @@ class AudioPatches:
 
         Only global/shared objects are restored (torch.load,
         torch.serialization.load, RoformerLoader.load_model,
-        MelBandRoformer.__init__, ParameterValidator.PARAMETER_RANGES).
+        MelBandRoformer.__init__, ParameterValidator.PARAMETER_RANGES,
+        AudioChunker, pydub.audio_segment.read_wav_audio).
         Instance-level monkey-patches on the separator object are left alone:
         each run builds a fresh separator.
         """
@@ -239,6 +333,22 @@ class AudioPatches:
         except Exception:
             pass
 
+        try:
+            from audio_separator.separator.audio_chunking import AudioChunker
+            if "AudioChunker.split_audio" in self._originals:
+                AudioChunker.split_audio = self._originals["AudioChunker.split_audio"]
+            if "AudioChunker.merge_chunks" in self._originals:
+                AudioChunker.merge_chunks = self._originals["AudioChunker.merge_chunks"]
+        except Exception:
+            pass
+
+        try:
+            import pydub.audio_segment as _pas
+            if "pydub.read_wav_audio" in self._originals:
+                _pas.read_wav_audio = self._originals["pydub.read_wav_audio"]
+        except Exception:
+            pass
+
         self._originals.clear()
 
     # ------------------------------------------------------------------ #
@@ -246,8 +356,13 @@ class AudioPatches:
     # ------------------------------------------------------------------ #
     def _patch_model_registry(self, separator):
         original_list_func = separator.list_supported_model_files
+        cached_models = None
 
         def patched_list_supported_model_files():
+            nonlocal cached_models
+            if cached_models is not None:
+                return cached_models
+
             models = original_list_func()
 
             if "MDXC" not in models:
@@ -294,7 +409,8 @@ class AudioPatches:
                     if model_type == "MDXC" and (
                         "roformer" in friendly_name.lower() or "roformer" in target_file.lower() or
                         "bandit" in friendly_name.lower() or "bandit" in target_file.lower() or
-                        "scnet" in friendly_name.lower() or "scnet" in target_file.lower()
+                        "scnet" in friendly_name.lower() or "scnet" in target_file.lower() or
+                        target_file in CUSTOM_CKPT_TO_YAML
                     ):
                         models[model_type][friendly_name]["is_roformer"] = True
 
@@ -324,19 +440,51 @@ class AudioPatches:
                     if model_type == "MDXC" and (
                         "roformer" in filename.lower() or
                         "bandit" in filename.lower() or
-                        "scnet" in filename.lower()
+                        "scnet" in filename.lower() or
+                        filename in CUSTOM_CKPT_TO_YAML
                     ):
                         models[model_type][filename]["is_roformer"] = True
 
+            cached_models = models
             return models
 
         separator.list_supported_model_files = patched_list_supported_model_files
 
         original_load_model_wrapper = separator.load_model
 
-        def patched_load_model_wrapper(model_filename="model_bs_roformer_ep_317_sdr_12.9755.ckpt"):
-            # Bandit and SCNet are now supported through the loader patch below.
-            return original_load_model_wrapper(model_filename)
+        def patched_load_model_wrapper(model_filename="model_bs_roformer_ep_317_sdr_12.9755.ckpt", *args, **kwargs):
+            import gc
+            import torch
+
+            force_reload = kwargs.get("force_reload", False)
+            # Reuse already-loaded model across consecutive runs/files if unchanged
+            if (
+                not force_reload
+                and getattr(separator, "_loaded_model_filename", None) == model_filename
+                and getattr(separator, "model_instance", None) is not None
+            ):
+                separator.model_instance.output_dir = separator.output_dir
+                return
+
+            # Release previous model from RAM/VRAM before loading the next one
+            # to avoid a 2x memory spike and OS/CUDA paging between models.
+            if getattr(separator, "model_instance", None) is not None:
+                try:
+                    if hasattr(separator.model_instance, "model_run"):
+                        separator.model_instance.model_run = None
+                    separator.model_instance = None
+                    separator._loaded_model_filename = None
+                    gc.collect()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available() and hasattr(torch, "mps"):
+                        torch.mps.empty_cache()
+                except Exception:
+                    pass
+
+            res = original_load_model_wrapper(model_filename, *args, **kwargs)
+            separator._loaded_model_filename = model_filename
+            return res
 
         separator.load_model = patched_load_model_wrapper
 
@@ -375,6 +523,44 @@ class AudioPatches:
                     hop = (model_data.get("kwargs", {}).get("hop_length") or
                            model_data.get("model", {}).get("hop_size") or 512)
                     model_data["model"]["stft_hop_length"] = hop
+
+            # Ensure BS-RoFormer / Mel-Band RoFormer YAMLs without 'roformer' in their filename
+            # (e.g. bs_leap_voc_conf.yaml, config_becruily_invert_clean.yaml, config_becruily_delimit.yaml)
+            # are properly flagged as is_roformer and always have inference.dim_t populated.
+            # NOTE: Do NOT check 'num_subbands' here — 'num_subbands' is an MDX23C (TFC_TDF_net) key!
+            model_sub = model_data.get("model") if isinstance(model_data, dict) else None
+            if isinstance(model_sub, dict) and (
+                "freqs_per_bands" in model_sub
+                or "num_bands" in model_sub
+            ):
+                model_data["is_roformer"] = True
+
+            if isinstance(model_data, dict) and model_data.get("is_roformer"):
+                if not isinstance(model_data.get("inference"), dict):
+                    model_data["inference"] = {}
+                if "dim_t" not in model_data["inference"]:
+                    training_dim_t = (
+                        model_data.get("training", {}).get("dim_t")
+                        if isinstance(model_data.get("training"), dict) else None
+                    )
+                    audio_dim_t = (
+                        model_data.get("audio", {}).get("dim_t")
+                        if isinstance(model_data.get("audio"), dict) else None
+                    )
+                    if training_dim_t is not None:
+                        model_data["inference"]["dim_t"] = int(training_dim_t)
+                    elif audio_dim_t is not None:
+                        model_data["inference"]["dim_t"] = int(audio_dim_t)
+                    else:
+                        chunk_size = (
+                            model_data.get("audio", {}).get("chunk_size", 352800)
+                            if isinstance(model_data.get("audio"), dict) else 352800
+                        )
+                        hop = (
+                            model_sub.get("stft_hop_length", 512)
+                            if isinstance(model_sub, dict) else 512
+                        )
+                        model_data["inference"]["dim_t"] = (int(chunk_size) // int(hop)) + 1
 
             return model_data
 
@@ -730,15 +916,15 @@ class AudioPatches:
                 yaml_path = os.path.join(model_dir_for_patch, yaml_filename)
                 if os.path.exists(yaml_path):
                     try:
-                        with open(yaml_path, 'r') as yf:
-                            raw_yaml = _yaml.safe_load(yf)
+                        with open(yaml_path, 'r', encoding='utf-8') as yf:
+                            raw_yaml = _yaml.load(yf, Loader=_yaml.FullLoader)
                         # Extract the model section (where real arch params live)
                         model_section = raw_yaml.get('model', raw_yaml)
                         _log.warning(
                             f"[Patch] Direct YAML read for {ckpt_filename}: "
                             f"dim={model_section.get('dim')}, "
                             f"depth={model_section.get('depth')}, "
-                            f"num_bands={model_section.get('num_bands', model_section.get('num_subbands'))}"
+                            f"num_bands={model_section.get('num_bands')}"
                         )
 
                         # Determine model type and prepare specific args
@@ -760,24 +946,30 @@ class AudioPatches:
                             'mlp_expansion_factor': model_section.get('mlp_expansion_factor', 4),
                         }
 
-                        # Add optional STFT/Loss params if present
+                        # Add optional STFT/Loss/Transformer params if present
                         for opt_key in [
                             'mask_estimator_depth', 'stft_n_fft', 'stft_hop_length',
                             'stft_win_length', 'stft_normalized', 'sample_rate',
                             'multi_stft_resolution_loss_weight', 'multi_stft_resolutions_window_sizes',
                             'multi_stft_hop_size', 'multi_stft_normalized', 'match_input_audio_length',
-                            'sage_attention', 'zero_dc', 'use_torch_checkpoint', 'skip_connection'
+                            'sage_attention', 'zero_dc', 'use_torch_checkpoint', 'skip_connection',
+                            'linear_transformer_depth', 'dim_freqs_in'
                         ]:
                             if opt_key in model_section:
                                 model_args[opt_key] = model_section[opt_key]
 
+                        import inspect as _inspect
                         if is_bs:
                             from audio_separator.separator.uvr_lib_v5.roformer.bs_roformer import BSRoformer
                             model_args['freqs_per_bands'] = tuple(model_section['freqs_per_bands'])
-                            model = BSRoformer(**model_args)
+                            valid_params = set(_inspect.signature(BSRoformer.__init__).parameters.keys())
+                            filtered_args = {k: v for k, v in model_args.items() if k in valid_params}
+                            model = BSRoformer(**filtered_args)
                         else:
                             model_args['num_bands'] = model_section.get('num_bands', model_section.get('num_subbands', 60))
-                            model = MelBandRoformer(**model_args)
+                            valid_params = set(_inspect.signature(MelBandRoformer.__init__).parameters.keys())
+                            filtered_args = {k: v for k, v in model_args.items() if k in valid_params}
+                            model = MelBandRoformer(**filtered_args)
 
                         if os.path.exists(model_path):
                             # Load weights — supports both .safetensors and .ckpt/.pth formats
@@ -937,3 +1129,149 @@ class AudioPatches:
             ParameterValidator.PARAMETER_RANGES['num_stems'] = (1, 1024)
         except Exception:
             pass
+
+    # ------------------------------------------------------------------ #
+    #  7. AudioChunker & Pydub WAV 0xFFFE IEEE Float header fix
+    # ------------------------------------------------------------------ #
+    def _patch_audio_chunker_and_pydub(self):
+        import struct
+        import uuid
+        import numpy as np
+        import soundfile as sf
+
+        # 7a. Patch pydub.audio_segment.read_wav_audio so WAVE_FORMAT_EXTENSIBLE (0xFFFE)
+        # with IEEE Float subformat (0x0003) is properly converted to int32 PCM instead of
+        # leaving raw float32 bytes under a PCM_32 integer header.
+        try:
+            import pydub.audio_segment as _pas
+            _orig_read_wav = _pas.read_wav_audio
+
+            def _patched_read_wav_audio(data, headers=None):
+                if not headers:
+                    headers = _pas.extract_wav_headers(data)
+                fmt = [x for x in headers if x.id == b'fmt ']
+                if fmt and fmt[0].size >= 16:
+                    pos = fmt[0].position + 8
+                    audio_format = struct.unpack_from('<H', data[pos:pos + 2])[0]
+                    is_float = (audio_format == 3)
+                    if audio_format == 0xFFFE and fmt[0].size >= 40 and len(data) >= pos + 26:
+                        sub_format = struct.unpack_from('<H', data[pos + 24:pos + 26])[0]
+                        if sub_format == 3:
+                            is_float = True
+                    if is_float:
+                        channels = struct.unpack_from('<H', data[pos + 2:pos + 4])[0]
+                        sample_rate = struct.unpack_from('<I', data[pos + 4:pos + 8])[0]
+                        bits_per_sample = struct.unpack_from('<H', data[pos + 14:pos + 16])[0]
+                        data_hdr = headers[-1]
+                        if data_hdr.id != b'data':
+                            raise _pas.CouldntDecodeError("Couldn't find data header in wav data")
+                        d_pos = data_hdr.position + 8
+                        raw_bytes = data[d_pos:d_pos + data_hdr.size]
+                        if bits_per_sample == 32:
+                            floats = np.frombuffer(raw_bytes, dtype='<f4')
+                        elif bits_per_sample == 64:
+                            floats = np.frombuffer(raw_bytes, dtype='<f8')
+                        else:
+                            raise _pas.CouldntDecodeError(f"Unsupported float bit depth: {bits_per_sample}")
+                        ints = np.clip(floats * 2147483647.0, -2147483648.0, 2147483647.0).astype('<i4')
+                        return _pas.WavData(1, channels, sample_rate, 32, ints.tobytes())
+                return _orig_read_wav(data, headers)
+
+            _pas.read_wav_audio = _patched_read_wav_audio
+            self._originals["pydub.read_wav_audio"] = _orig_read_wav
+        except Exception as e:
+            logger.warning(f"[Patch] Could not patch pydub.read_wav_audio: {e}")
+
+        # 7b. Patch AudioChunker.split_audio and AudioChunker.merge_chunks to stream via soundfile,
+        # preserving 32-bit IEEE Float (FLOAT) bit-perfectly and avoiding full-file RAM loading.
+        try:
+            from audio_separator.separator.audio_chunking import AudioChunker
+            _orig_split_audio = AudioChunker.split_audio
+            _orig_merge_chunks = AudioChunker.merge_chunks
+
+            def _patched_split_audio(self_chunker, input_path, output_dir):
+                if not os.path.exists(input_path):
+                    raise FileNotFoundError(f"Input file not found: {input_path}")
+                os.makedirs(output_dir, exist_ok=True)
+
+                try:
+                    with sf.SoundFile(input_path, 'r') as f:
+                        sr = f.samplerate
+                        total_frames = len(f)
+                        subtype = f.subtype if f.subtype in ('FLOAT', 'DOUBLE', 'PCM_16', 'PCM_24', 'PCM_32') else 'FLOAT'
+                        total_duration_s = total_frames / float(sr) if sr > 0 else 0.0
+                        chunk_frames = max(1, int(round((self_chunker.chunk_duration_ms / 1000.0) * sr)))
+                        num_chunks = max(1, (total_frames + chunk_frames - 1) // chunk_frames)
+
+                        self_chunker.logger.info(
+                            f"Splitting {total_duration_s:.1f}s audio into {num_chunks} chunks "
+                            f"of {self_chunker.chunk_duration_ms / 1000:.1f}s each (subtype={subtype})"
+                        )
+
+                        _, ext = os.path.splitext(input_path)
+                        if not ext or ext.lower() not in ('.wav', '.flac', '.aiff', '.aif'):
+                            ext = ".wav"
+
+                        chunk_paths = []
+                        for i in range(num_chunks):
+                            data = f.read(chunk_frames, dtype='float32', always_2d=True)
+                            if data.size == 0:
+                                break
+                            chunk_filename = f"chunk_{i:04d}{ext}"
+                            chunk_path = os.path.join(output_dir, chunk_filename)
+                            sf.write(chunk_path, data, sr, subtype=subtype)
+                            chunk_paths.append(chunk_path)
+
+                        return chunk_paths
+                except Exception as sf_err:
+                    self_chunker.logger.warning(f"SoundFile split fallback to pydub ({sf_err})")
+                    return _orig_split_audio(self_chunker, input_path, output_dir)
+
+            def _patched_merge_chunks(self_chunker, chunk_paths, output_path):
+                if not chunk_paths:
+                    raise ValueError("Cannot merge empty list of chunks")
+                for cp in chunk_paths:
+                    if not os.path.exists(cp):
+                        raise FileNotFoundError(f"Chunk file not found: {cp}")
+
+                _, ext = os.path.splitext(output_path)
+                if ext.lower() in ('', '.wav', '.flac', '.aiff', '.aif'):
+                    try:
+                        info = sf.info(chunk_paths[0])
+                        sr = info.samplerate
+                        channels = info.channels
+                        subtype = info.subtype if info.subtype in ('FLOAT', 'DOUBLE', 'PCM_16', 'PCM_24', 'PCM_32') else 'FLOAT'
+                        self_chunker.logger.info(f"Merging {len(chunk_paths)} chunks into {output_path} (subtype={subtype})")
+
+                        out_parent = os.path.dirname(os.path.abspath(output_path))
+                        os.makedirs(out_parent, exist_ok=True)
+                        tmp_out = os.path.join(out_parent, f".tmp_merge_{uuid.uuid4().hex[:8]}{ext or '.wav'}")
+                        try:
+                            with sf.SoundFile(tmp_out, 'w', samplerate=sr, channels=channels, subtype=subtype) as out_f:
+                                for cp in chunk_paths:
+                                    data, c_sr = sf.read(cp, dtype='float32', always_2d=True)
+                                    if data.shape[1] != channels:
+                                        if channels == 2 and data.shape[1] == 1:
+                                            data = np.tile(data, (1, 2))
+                                        elif channels == 1 and data.shape[1] > 1:
+                                            data = np.mean(data, axis=1, keepdims=True)
+                                    out_f.write(data)
+                            os.replace(tmp_out, output_path)
+                            return output_path
+                        finally:
+                            if os.path.exists(tmp_out):
+                                try:
+                                    os.remove(tmp_out)
+                                except Exception:
+                                    pass
+                    except Exception as sf_merge_err:
+                        self_chunker.logger.warning(f"SoundFile merge fallback to pydub ({sf_merge_err})")
+
+                return _orig_merge_chunks(self_chunker, chunk_paths, output_path)
+
+            AudioChunker.split_audio = _patched_split_audio
+            AudioChunker.merge_chunks = _patched_merge_chunks
+            self._originals["AudioChunker.split_audio"] = _orig_split_audio
+            self._originals["AudioChunker.merge_chunks"] = _orig_merge_chunks
+        except Exception as e:
+            logger.warning(f"[Patch] Could not patch AudioChunker: {e}")

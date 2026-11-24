@@ -1,6 +1,6 @@
 ===============================================================================
                        MUSIC SEPARATOR - USER MANUAL                       
-                       ENGLISH MANUAL (EN) - v1.8
+                       ENGLISH MANUAL (EN) - v1.9
 ===============================================================================
 
 Welcome to Music separator, a powerful AI-driven audio separation tool based on 
@@ -28,8 +28,32 @@ macOS (Apple Silicon M1/M2/M3/M4):
 - NOTE: FFmpeg is included in the package. If you face permission issues, 
   refer to the README for 'xattr' command instructions.
 
-2. WHAT'S NEW in v1.8
+2. WHAT'S NEW in v1.9
 -------------------------------------------------------------------------------
+- 10 New AI Models Added to the Catalog:
+  * BS-Roformer BowedStrings v2 (Gilliaan): upgraded high-precision bowed strings model.
+  * BS-Roformer Drums v1 (Gilliaan): dedicated BS-Roformer full-mix drums extraction model.
+  * BS-Roformer Leap & Leap Xe (Vocals and Instrumental, Unwa): next-generation vocal/instrumental models.
+  * Mel-Band RoFormer Invert Clean (Becruily): specialized cleaner for phase-inverted DIY acapellas.
+  * BS-Roformer Delimit (Becruily): brickwall limiter restoration model to recover natural dynamics.
+  * SCNet XL v5 & SCNet XL IHF Masked (ZFTurbo): high-SDR 4-stem separation models.
+- Upgraded Ultimate Stems + Drum Split Preset: Pass 1 now uses BS-Roformer BowedStrings v2
+  for cleaner, more accurate bowed strings separation.
+- Upgraded Core Engine (audio-separator 0.47.0): Improved overlap handling and separation fidelity.
+- Critical 32-bit Float WAV Chunking Distortion Fix: Resolved severe distortion when chunking
+  was enabled on MP3 and other audio files converted to 32-bit float WAV (WAVE_FORMAT_EXTENSIBLE),
+  preserving bit-perfect 32-bit float chunks via soundfile.
+- Headless CLI & Cached-Model Batch Routing Fixes (PR #13):
+  * Fixed headless CLI callbacks when no wxPython GUI event loop is running.
+  * Synchronized cached model output directories across batch tracks and preset/ensemble passes.
+- Faster Inter-Model Transitions & Memory Management: Selective branch stem caching,
+  zero-copy file moves instead of redundant copies, proactive RAM/VRAM cleanup before loading
+  a new model, and cached model reuse across consecutive batch tracks.
+- Stability & Post-Mix Hardening: Fixed MDX23C (e.g. DrumSep) YAML architecture detection,
+  full YAML tuple loader support, safer post-mix collision/partial-read handling, and clearer
+  separation error vs. user cancellation reporting.
+
+WHAT'S NEW in v1.8:
 - AIFF & Apple Lossless (ALAC) Audio Formats Support:
   * Open and batch-process .aiff and .aif audio files from both GUI and CLI.
   * Export to uncompressed AIFF (16-bit, 24-bit, 32-bit Float) and ALAC Apple Lossless in .m4a container (16-bit and 24-bit), ensuring maximum audio fidelity and seamless integration with Logic Pro, macOS, iOS, and professional production workflows.

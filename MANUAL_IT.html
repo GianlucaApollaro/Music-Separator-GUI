@@ -209,7 +209,7 @@
     <div class="container">
         <header>
             <h1>Music Separator</h1>
-            <p>Manuale Utente - v1.8</p>
+            <p>Manuale Utente - v1.9</p>
         </header>
 
         <div class="download-box">
@@ -222,7 +222,7 @@
             <h3>Indice dei Contenuti</h3>
             <ul class="index-list">
                 <li><a href="#installation">1. Installazione</a></li>
-                <li><a href="#new-features">2. Novità nella v1.8</a></li>
+                <li><a href="#new-features">2. Novità nella v1.9</a></li>
                 <li><a href="#basic-usage">3. Uso Base (Modello Singolo)</a></li>
                 <li><a href="#ensemble">4. Native Ensemble</a></li>
                 <li><a href="#presets">5. Preset a Catena &amp; Personalizzati</a></li>
@@ -265,8 +265,18 @@
         </section>
 
         <section id="new-features">
-            <h2>2. Novità nella v1.8 <span class="badge">Nuovo</span></h2>
+            <h2>2. Novità nella v1.9 <span class="badge">Nuovo</span></h2>
             <div class="card">
+                <ul>
+                    <li><strong>10 Nuovi Modelli AI nel Catalogo:</strong> Integrati <code>BS-Roformer BowedStrings v2</code> e <code>Drums v1</code> (Gilliaan), <code>BS-Roformer Leap</code> e <code>Leap Xe</code> Vocals/Instrumental (Unwa), <code>Mel-Band RoFormer Invert Clean</code> e <code>BS-Roformer Delimit</code> (Becruily), <code>SCNet XL v5</code> e <code>SCNet XL IHF Masked</code> (ZFTurbo).</li>
+                    <li><strong>Preset Ultimate Stems + Drum Split Aggiornato:</strong> Il Passaggio 1 utilizza ora il nuovo modello <code>BS-Roformer BowedStrings v2</code> per un'estrazione degli archi ancora più pulita e precisa.</li>
+                    <li><strong>Motore di Separazione Aggiornato (<code>audio-separator 0.47.0</code>):</strong> Migliore gestione dell'overlap e qualità audio complessiva superiore.</li>
+                    <li><strong>Correzione Critica Distorsione con Chunking WAV 32-bit Float:</strong> Risolto il problema di audio fortemente distorto quando l'opzione Chunking era attiva su MP3 o altri file convertiti in WAV 32-bit float (<code>WAVE_FORMAT_EXTENSIBLE</code>), preservando i chunk in formato float 32-bit bit-perfect tramite <code>soundfile</code>.</li>
+                    <li><strong>Correzione Modalità CLI Headless e Batch con Modello in Cache (PR #13):</strong> Risolti i callback CLI senza loop eventi wxPython e sincronizzata correttamente la cartella di output del modello in cache tra brani consecutivi in batch e tra i passaggi di preset/ensemble.</li>
+                    <li><strong>Transizioni tra Modelli Più Veloci e Gestione Memoria Ottimizzata:</strong> Cache selettiva per le diramazioni, spostamento diretto dei file intermedi senza copie superflue, rilascio immediato di RAM/VRAM al cambio modello e riuso del modello nei batch.</li>
+                    <li><strong>Stabilità e Post-Mix:</strong> Risolto il rilevamento dei modelli MDX23C (come DrumSep) con YAML personalizzati, migliorata la lettura YAML con tuple Python, protetti i post-mix da collisioni e migliorata la distinzione tra errori e annullamenti.</li>
+                </ul>
+                <p>Funzionalità introdotte nella v1.8:</p>
                 <ul>
                     <li><strong>Supporto Formati Audio AIFF e ALAC (Apple Lossless):</strong> Pieno supporto all'apertura e scansione batch di file <code>.aiff</code> e <code>.aif</code>, oltre all'esportazione professionale in formato non compresso AIFF (16-bit, 24-bit, 32-bit Float) e compresso lossless ALAC (16-bit e 24-bit in contenitore <code>.m4a</code>), assicurando la massima fedeltà e compatibilità ottimale con Logic Pro e l'ecosistema Apple.</li>
                     <li><strong>Preset Personalizzati con Catene Ramificate (Flussi ad Albero / Fork):</strong> I preset personalizzati ora supportano pipeline non-lineari. A partire dal 2° passo puoi selezionare come sorgente audio qualsiasi stem generato nei passi precedenti o l'audio originale, impostare rami terminali con <em>"Nessuno (fine di questo ramo)"</em> e conservare o rinominare gli stem generati in qualsiasi passaggio.</li>

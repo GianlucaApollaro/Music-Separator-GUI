@@ -113,6 +113,8 @@ class SeparationThread(threading.Thread):
                 self.output_dir = "previews"
 
     def run(self):
+        total_files = len(self.input_files)
+        completed_files = 0
         try:
             # Create a dedicated session temp directory for all intermediates associated with current PID (B07)
             my_pid = os.getpid()
@@ -263,7 +265,6 @@ class SeparationThread(threading.Thread):
 
             reserved_output_paths = set()
 
-            total_files = len(self.input_files)
             for file_idx, current_input_file in enumerate(self.input_files, 1):
                 if self._stop_event.is_set():
                     break
@@ -516,7 +517,7 @@ class SeparationThread(threading.Thread):
                                     out_name = os.path.basename(out_path)
                                     self.post_log(i18n.tr("status_renamed_collision", file=out_name))
                                 reserved_output_paths.add(os.path.normcase(out_path))
-                                shutil.copy(os.path.join(temp_dir_1, f1), out_path)
+                                shutil.move(os.path.join(temp_dir_1, f1), out_path)
                                 final_outputs.append(out_name)
                         # Stems only in M2
                         for f2 in output_files_2:
@@ -535,7 +536,7 @@ class SeparationThread(threading.Thread):
                                     out_name = os.path.basename(out_path)
                                     self.post_log(i18n.tr("status_renamed_collision", file=out_name))
                                 reserved_output_paths.add(os.path.normcase(out_path))
-                                shutil.copy(os.path.join(temp_dir_2, f2), out_path)
+                                shutil.move(os.path.join(temp_dir_2, f2), out_path)
                                 final_outputs.append(out_name)
 
                         shutil.rmtree(temp_dir_1, ignore_errors=True)
@@ -546,6 +547,7 @@ class SeparationThread(threading.Thread):
                     else:
                         # ====== CHAINED PRESET MULTI-PASS (Supports N passes) ======
                         final_outputs = []
+                        stem_output_map = {}
 
                         # Collect all models in order from preset_config or manual models
                         chain_steps = []
@@ -588,6 +590,18 @@ class SeparationThread(threading.Thread):
                             })
                             step_idx += 1
 
+                        # Pre-compute which (step_num, stem_name) pairs are actually referenced by downstream steps
+                        needed_cache_steps = {}
+                        for st_cfg in chain_steps:
+                            src_val = st_cfg.get("source", "")
+                            if src_val and src_val.startswith("step_"):
+                                try:
+                                    s_part, s_stem = src_val.split(":", 1)
+                                    s_num = int(s_part.replace("step_", ""))
+                                    needed_cache_steps.setdefault(s_num, []).append(s_stem.lower())
+                                except Exception:
+                                    pass
+
                         stem_cache = {}
                         current_pass_file = safe_input_file
                         for i, step in enumerate(chain_steps):
@@ -623,17 +637,6 @@ class SeparationThread(threading.Thread):
                                 except Exception as e:
                                     logger.warning(f"Failed to resolve step source '{step_source}': {e}")
 
-                            def _copy_with_gain(src, dst, g):
-                                if g != 0.0:
-                                    try:
-                                        d_arr, d_sr = sf.read(src, dtype='float32')
-                                        d_arr = d_arr * (10.0 ** (g / 20.0))
-                                        sf.write(dst, d_arr, d_sr, subtype='FLOAT')
-                                        return
-                                    except Exception:
-                                        pass
-                                shutil.copy(src, dst)
-
                             temp_dir = self._mkdtemp(f"chain_{step_num}_")
                             self.post_progress(0)
                             self.post_log(i18n.tr("status_ensemble_start") + i18n.tr("log_pass", num=step_num, model=model_file))
@@ -651,23 +654,53 @@ class SeparationThread(threading.Thread):
                                 shutil.rmtree(temp_dir, ignore_errors=True)
                                 break
 
-                            # Cache all stems produced in this step for potential downstream branch consumption
-                            stem_cache[step_num] = {}
-                            for f in step_output_files:
-                                st = stem_from_filename(f)
-                                cached_copy = os.path.join(session_dir, f"branch_cache_s{step_num}_{st}_{uuid.uuid4().hex[:6]}.wav")
-                                shutil.copy2(os.path.join(temp_dir, f), cached_copy)
-                                stem_cache[step_num][st] = cached_copy
-
+                            # Determine next_pass_file first so we know which file in temp_dir is still needed downstream
                             next_pass_file = None
+                            if pass_stem != "" and not is_last_step:
+                                for f in step_output_files:
+                                    if stems_are_equivalent(stem_from_filename(f), pass_stem):
+                                        next_pass_file = os.path.join(temp_dir, f)
+                                        break
+                                if not next_pass_file and step_output_files:
+                                    sec_group = {"other", "instrumental", "noise", "reverb", "no_dry", "nodry", "bleed", "extra"}
+                                    if len(step_output_files) == 2:
+                                        if pass_stem in sec_group:
+                                            next_pass_file = os.path.join(temp_dir, step_output_files[1])
+                                        else:
+                                            next_pass_file = os.path.join(temp_dir, step_output_files[0])
+                                    else:
+                                        next_pass_file = os.path.join(temp_dir, step_output_files[0])
+                                    self.post_log(i18n.tr("log_fallback_stem", file=os.path.basename(next_pass_file), stem=pass_stem))
+
+                            # Identify only stems actually referenced by downstream branch steps (avoid copying unused stems)
+                            stem_cache[step_num] = {}
+                            cached_source_files = {}
+                            if step_num in needed_cache_steps:
+                                req_stems = needed_cache_steps[step_num]
+                                for f in step_output_files:
+                                    st = stem_from_filename(f)
+                                    if any(stems_are_equivalent(st, req_s) for req_s in req_stems):
+                                        cached_source_files[os.path.join(temp_dir, f)] = st
+
+                            def _copy_with_gain(src, dst, g):
+                                if g != 0.0:
+                                    try:
+                                        d_arr, d_sr = sf.read(src, dtype='float32')
+                                        d_arr = d_arr * (10.0 ** (g / 20.0))
+                                        sf.write(dst, d_arr, d_sr, subtype='FLOAT')
+                                        return
+                                    except Exception:
+                                        pass
+                                if src != next_pass_file and src not in cached_source_files:
+                                    shutil.move(src, dst)
+                                else:
+                                    shutil.copy(src, dst)
+
                             for f in step_output_files:
                                 stem = stem_from_filename(f)
                                 clean_ext = os.path.splitext(f)[1]
                                 stem_match = (pass_stem != "" and stems_are_equivalent(stem, pass_stem))
                                 found_map, suffix = get_rename_suffix(stem, rename_map) if rename_map else (False, None)
-
-                                if stem_match and not is_last_step:
-                                    next_pass_file = os.path.join(temp_dir, f)
 
                                 if stem_match and keep_pass_stem_name:
                                     suffix_clean = keep_pass_stem_name.lstrip('_')
@@ -680,11 +713,15 @@ class SeparationThread(threading.Thread):
                                     reserved_output_paths.add(os.path.normcase(final_path))
                                     _copy_with_gain(os.path.join(temp_dir, f), final_path, gain_db)
                                     final_outputs.append(out_name)
+                                    stem_output_map[suffix_clean.lower()] = out_name
                                     continue
 
                                 if rename_map:
                                     if found_map and suffix is None:
                                         # Explicitly discarded stem
+                                        continue
+                                    if stem_match and not is_last_step and not found_map:
+                                        # Pass stem forwarded to next step and not explicitly requested in rename_map
                                         continue
                                     if suffix is not None:
                                         suffix_clean = suffix.lstrip('_')
@@ -697,6 +734,7 @@ class SeparationThread(threading.Thread):
                                         reserved_output_paths.add(os.path.normcase(final_path))
                                         _copy_with_gain(os.path.join(temp_dir, f), final_path, gain_db)
                                         final_outputs.append(out_name)
+                                        stem_output_map[suffix_clean.lower()] = out_name
                                 else:
                                     if not stem_match or is_last_step:
                                         def_keep = keep_name if keep_name else f"_{stem.capitalize()}"
@@ -710,28 +748,26 @@ class SeparationThread(threading.Thread):
                                         reserved_output_paths.add(os.path.normcase(final_path))
                                         _copy_with_gain(os.path.join(temp_dir, f), final_path, gain_db)
                                         final_outputs.append(out_name)
+                                        stem_output_map[suffix_clean.lower()] = out_name
 
-                            # Handle fallback if pass stem was not matched exactly
-                            if pass_stem and not next_pass_file and not is_last_step and step_output_files:
-                                sec_group = {"other", "instrumental", "noise", "reverb", "no_dry", "nodry", "bleed", "extra"}
-                                if len(step_output_files) == 2:
-                                    if pass_stem in sec_group:
-                                        next_pass_file = os.path.join(temp_dir, step_output_files[1])
-                                    else:
-                                        next_pass_file = os.path.join(temp_dir, step_output_files[0])
-                                else:
-                                    next_pass_file = os.path.join(temp_dir, step_output_files[0])
-                                self.post_log(i18n.tr("log_fallback_stem", file=os.path.basename(next_pass_file), stem=pass_stem))
+                            # Move or copy only the needed branch stems into stem_cache
+                            for src_p, st in cached_source_files.items():
+                                cached_copy = os.path.join(session_dir, f"branch_cache_s{step_num}_{st}_{uuid.uuid4().hex[:6]}.wav")
+                                if src_p != next_pass_file and os.path.exists(src_p):
+                                    shutil.move(src_p, cached_copy)
+                                elif os.path.exists(src_p):
+                                    shutil.copy2(src_p, cached_copy)
+                                stem_cache[step_num][st] = cached_copy
 
                             if not is_last_step:
                                 next_step_has_source = (i + 1 < len(chain_steps) and bool(chain_steps[i + 1].get("source")))
                                 if not next_pass_file and not next_step_has_source:
                                     self.post_log(i18n.tr("log_missing_pass_stem", stem=pass_stem))
                                     break
-                                if next_pass_file:
+                                if next_pass_file and os.path.exists(next_pass_file):
                                     prev_pass = current_pass_file if current_pass_file != safe_input_file else None
                                     persistent_next_pass = os.path.join(session_dir, f"chain_pass_{uuid.uuid4().hex[:8]}.wav")
-                                    shutil.copy2(next_pass_file, persistent_next_pass)
+                                    shutil.move(next_pass_file, persistent_next_pass)
                                     current_pass_file = persistent_next_pass
                                     # Clean up previous pass file if not referenced in branch cache
                                     if prev_pass and os.path.exists(prev_pass):
@@ -764,6 +800,16 @@ class SeparationThread(threading.Thread):
                             break
 
                         # Post-mix rules (e.g. summing stems or subtracting vocals from input mix)
+                        def _resolve_post_mix_source(stem_key):
+                            clean_key = stem_key.lstrip('_')
+                            mapped = stem_output_map.get(clean_key.lower())
+                            if mapped and mapped in final_outputs:
+                                return mapped
+                            return next(
+                                (f for f in final_outputs if os.path.splitext(f)[0].lower() in (f"{folder_name}_{clean_key}".lower(), clean_key.lower())),
+                                None
+                            )
+
                         post_mix_rules = self.preset_config.get("post_mix", []) if self.preset_config else []
                         for pm_rule in post_mix_rules:
                             if self._stop_event.is_set():
@@ -774,13 +820,20 @@ class SeparationThread(threading.Thread):
 
                             if pm_rule.get("subtract_from_input"):
                                 stems_to_sub = pm_rule.get("subtract_stems", [])
+                                if not stems_to_sub:
+                                    continue
                                 try:
                                     sub_data, in_sr = sf.read(safe_input_file, dtype='float32')
+                                    subtracted_count = 0
+                                    missing_or_failed = []
                                     for stem_key in stems_to_sub:
-                                        clean_key = stem_key.lstrip('_')
-                                        match_file = next((f for f in final_outputs if os.path.splitext(f)[0] in (f"{folder_name}_{clean_key}", clean_key)), None)
-                                        if match_file:
-                                            full_p = os.path.join(file_output_dir, match_file)
+                                        match_file = _resolve_post_mix_source(stem_key)
+                                        if not match_file:
+                                            missing_or_failed.append(stem_key)
+                                            self.post_log(f"Warning: Source stem '{stem_key}' not found for post-mix '{out_suffix}'.")
+                                            continue
+                                        full_p = os.path.join(file_output_dir, match_file)
+                                        try:
                                             data, stem_sr = sf.read(full_p, dtype='float32')
                                             if stem_sr != in_sr:
                                                 self.post_log(f"Resampling {match_file} from {stem_sr}Hz to {in_sr}Hz for exact alignment")
@@ -791,18 +844,26 @@ class SeparationThread(threading.Thread):
                                                 sub_data = np.tile(sub_data[:, None], (1, data.shape[1]))
                                             min_len = min(len(sub_data), len(data))
                                             sub_data[:min_len] -= data[:min_len]
+                                            subtracted_count += 1
+                                        except Exception as sub_read_err:
+                                            missing_or_failed.append(stem_key)
+                                            self.post_log(f"Error reading {match_file} for post-mixing: {sub_read_err}")
 
-                                    out_sfx_clean = out_suffix.lstrip('_')
-                                    out_mix_name = f"{folder_name}_{out_sfx_clean}.wav" if not self.use_subfolder else f"{out_sfx_clean}.wav"
-                                    out_mix_path = os.path.join(file_output_dir, out_mix_name)
-                                    if os.path.exists(out_mix_path) or os.path.normcase(out_mix_path) in reserved_output_paths:
-                                        out_mix_path = get_unique_path(out_mix_path, reserved_output_paths)
-                                        out_mix_name = os.path.basename(out_mix_path)
-                                        self.post_log(i18n.tr("status_renamed_collision", file=out_mix_name))
-                                    reserved_output_paths.add(os.path.normcase(out_mix_path))
-                                    sf.write(out_mix_path, sub_data, in_sr, subtype='FLOAT')
-                                    if out_mix_name not in final_outputs:
-                                        final_outputs.append(out_mix_name)
+                                    if subtracted_count > 0:
+                                        out_sfx_clean = out_suffix.lstrip('_')
+                                        out_mix_name = f"{folder_name}_{out_sfx_clean}.wav" if not self.use_subfolder else f"{out_sfx_clean}.wav"
+                                        out_mix_path = os.path.join(file_output_dir, out_mix_name)
+                                        if os.path.exists(out_mix_path) or os.path.normcase(out_mix_path) in reserved_output_paths:
+                                            out_mix_path = get_unique_path(out_mix_path, reserved_output_paths)
+                                            out_mix_name = os.path.basename(out_mix_path)
+                                            self.post_log(i18n.tr("status_renamed_collision", file=out_mix_name))
+                                        reserved_output_paths.add(os.path.normcase(out_mix_path))
+                                        sf.write(out_mix_path, sub_data, in_sr, subtype='FLOAT')
+                                        if out_mix_name not in final_outputs:
+                                            final_outputs.append(out_mix_name)
+                                        stem_output_map[out_sfx_clean.lower()] = out_mix_name
+                                        if missing_or_failed:
+                                            self.post_log(f"Warning: Post-mix '{out_mix_name}' is partial (missing/unreadable sources: {', '.join(missing_or_failed)}).")
                                 except Exception as sub_err:
                                     self.post_log(f"Error computing subtraction instrumental: {sub_err}")
 
@@ -814,30 +875,34 @@ class SeparationThread(threading.Thread):
 
                                 mixed_audio = None
                                 mix_sr = None
-                                found_paths = []
+                                mixed_sources = []
+                                missing_or_failed = []
                                 for stem_key in stems_to_mix:
-                                    clean_key = stem_key.lstrip('_')
-                                    match_file = next((f for f in final_outputs if os.path.splitext(f)[0] in (f"{folder_name}_{clean_key}", clean_key)), None)
-                                    if match_file:
-                                        full_p = os.path.join(file_output_dir, match_file)
-                                        found_paths.append((stem_key, match_file, full_p))
-                                        try:
-                                            data, sr = sf.read(full_p, dtype='float32')
-                                            if mix_sr is None:
-                                                mix_sr = sr
-                                            elif sr != mix_sr:
-                                                data = resample_audio(data, sr, mix_sr)
-                                            if mixed_audio is None:
-                                                mixed_audio = data
-                                            else:
-                                                if mixed_audio.ndim == 1 and data.ndim == 2:
-                                                    mixed_audio = np.tile(mixed_audio[:, None], (1, data.shape[1]))
-                                                elif mixed_audio.ndim == 2 and data.ndim == 1:
-                                                    data = np.tile(data[:, None], (1, mixed_audio.shape[1]))
-                                                min_len = min(len(mixed_audio), len(data))
-                                                mixed_audio = mixed_audio[:min_len] + data[:min_len]
-                                        except Exception as mix_err:
-                                            self.post_log(f"Error reading {match_file} for post-mixing: {mix_err}")
+                                    match_file = _resolve_post_mix_source(stem_key)
+                                    if not match_file:
+                                        missing_or_failed.append(stem_key)
+                                        self.post_log(f"Warning: Source stem '{stem_key}' not found for post-mix '{out_suffix}'.")
+                                        continue
+                                    full_p = os.path.join(file_output_dir, match_file)
+                                    try:
+                                        data, sr = sf.read(full_p, dtype='float32')
+                                        if mix_sr is None:
+                                            mix_sr = sr
+                                        elif sr != mix_sr:
+                                            data = resample_audio(data, sr, mix_sr)
+                                        if mixed_audio is None:
+                                            mixed_audio = data
+                                        else:
+                                            if mixed_audio.ndim == 1 and data.ndim == 2:
+                                                mixed_audio = np.tile(mixed_audio[:, None], (1, data.shape[1]))
+                                            elif mixed_audio.ndim == 2 and data.ndim == 1:
+                                                data = np.tile(data[:, None], (1, mixed_audio.shape[1]))
+                                            min_len = min(len(mixed_audio), len(data))
+                                            mixed_audio = mixed_audio[:min_len] + data[:min_len]
+                                        mixed_sources.append((stem_key, match_file, full_p))
+                                    except Exception as mix_err:
+                                        missing_or_failed.append(stem_key)
+                                        self.post_log(f"Error reading {match_file} for post-mixing: {mix_err}")
 
                                 if mixed_audio is not None and mix_sr is not None:
                                     out_sfx_clean = out_suffix.lstrip('_')
@@ -851,19 +916,29 @@ class SeparationThread(threading.Thread):
                                     sf.write(out_mix_path, mixed_audio, mix_sr, subtype='FLOAT')
                                     if out_mix_name not in final_outputs:
                                         final_outputs.append(out_mix_name)
+                                    stem_output_map[out_sfx_clean.lower()] = out_mix_name
+                                    if missing_or_failed:
+                                        self.post_log(f"Warning: Post-mix '{out_mix_name}' is partial (missing/unreadable sources: {', '.join(missing_or_failed)}).")
 
-                                    # Cleanup deleted sources if requested
+                                    # Cleanup deleted sources if requested (only sources that were successfully read and mixed)
                                     for del_key in delete_sources:
                                         del_clean = del_key.lstrip('_')
-                                        to_del = [item for item in found_paths if item[0] == del_key or os.path.splitext(item[1])[0] in (f"{folder_name}_{del_clean}", del_clean)]
+                                        to_del = [
+                                            item for item in mixed_sources
+                                            if item[0] == del_key or os.path.splitext(item[1])[0].lower() in (f"{folder_name}_{del_clean}".lower(), del_clean.lower())
+                                        ]
                                         for _, df_name, df_path in to_del:
                                             if os.path.exists(df_path) and df_path != out_mix_path:
                                                 try:
                                                     os.remove(df_path)
                                                 except Exception:
                                                     pass
+                                            reserved_output_paths.discard(os.path.normcase(df_path))
                                             if df_name in final_outputs:
                                                 final_outputs.remove(df_name)
+                                            for k, v in list(stem_output_map.items()):
+                                                if v == df_name:
+                                                    del stem_output_map[k]
 
                         output_files = final_outputs
                         self.post_log(i18n.tr("status_ensemble_done"))
@@ -989,7 +1064,7 @@ class SeparationThread(threading.Thread):
                                 out_name = os.path.basename(out_path)
                                 self.post_log(i18n.tr("status_renamed_collision", file=out_name))
                             reserved_output_paths.add(os.path.normcase(out_path))
-                            shutil.copy(os.path.join(temp_dir_1, f1), out_path)
+                            shutil.move(os.path.join(temp_dir_1, f1), out_path)
                             final_outputs.append(out_name)
                     # Stems only in M2
                     for f2 in output_files_2:
@@ -1010,7 +1085,7 @@ class SeparationThread(threading.Thread):
                                 out_name = os.path.basename(out_path)
                                 self.post_log(i18n.tr("status_renamed_collision", file=out_name))
                             reserved_output_paths.add(os.path.normcase(out_path))
-                            shutil.copy(os.path.join(temp_dir_2, f2), out_path)
+                            shutil.move(os.path.join(temp_dir_2, f2), out_path)
                             final_outputs.append(out_name)
 
                     shutil.rmtree(temp_dir_1, ignore_errors=True)
@@ -1175,9 +1250,11 @@ class SeparationThread(threading.Thread):
                     fpath = os.path.join(file_output_dir, fname) if not os.path.isabs(fname) else fname
                     if os.path.exists(fpath):
                         self.all_output_files.append(fpath)
+                if not self._stop_event.is_set():
+                    completed_files += 1
 
             if self._stop_event.is_set():
-                self.post_log(i18n.tr("status_cancelled"))
+                self.post_log(i18n.tr("status_cancelled", count=completed_files, total=total_files))
                 if self.on_done:
                     try:
                         self.on_done(False, i18n.tr("msg_cancelled"), self.all_output_files)
@@ -1196,16 +1273,27 @@ class SeparationThread(threading.Thread):
                 if self.parent:
                     wx.PostEvent(self.parent, DoneEvent(True, i18n.tr("msg_success"), output_files=self.all_output_files, status="success"))
 
-        except (KeyboardInterrupt, SystemExit):
-            self._stop_event.set()
-            self.post_log(i18n.tr("status_cancelled"))
-            if self.on_done:
-                try:
-                    self.on_done(False, i18n.tr("msg_cancelled"), self.all_output_files)
-                except Exception:
-                    pass
-            if self.parent:
-                wx.PostEvent(self.parent, DoneEvent(False, i18n.tr("msg_cancelled"), output_files=self.all_output_files, status="cancelled"))
+        except (KeyboardInterrupt, SystemExit) as sys_ex:
+            if not self._stop_event.is_set() and isinstance(sys_ex, SystemExit) and sys_ex.code not in (0, None):
+                error_msg = f"Model loading or inference terminated with exit code {sys_ex.code}. Check the log above for details."
+                self.post_log(i18n.tr("status_error", error=error_msg))
+                if self.on_done:
+                    try:
+                        self.on_done(False, error_msg, [])
+                    except Exception:
+                        pass
+                if self.parent:
+                    wx.PostEvent(self.parent, DoneEvent(False, error_msg))
+            else:
+                self._stop_event.set()
+                self.post_log(i18n.tr("status_cancelled", count=completed_files, total=total_files))
+                if self.on_done:
+                    try:
+                        self.on_done(False, i18n.tr("msg_cancelled"), self.all_output_files)
+                    except Exception:
+                        pass
+                if self.parent:
+                    wx.PostEvent(self.parent, DoneEvent(False, i18n.tr("msg_cancelled"), output_files=self.all_output_files, status="cancelled"))
 
         except Exception as e:
             import traceback
